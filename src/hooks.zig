@@ -39,7 +39,8 @@ pub fn init() bool {
     });
 
     if (load_library_a) |*func| blk: {
-        detours.attach(LoadLibraryA, func) catch |err| {
+        _ = func;
+        detours.attach(LoadLibraryA, &load_library_a.?) catch |err| {
             std.log.err("LoadLibraryA: failed to attach: {}", .{err});
             load_library_a = null;
             break :blk;
@@ -53,7 +54,8 @@ pub fn init() bool {
     });
 
     if (load_library_w) |*func| blk: {
-        detours.attach(LoadLibraryW, func) catch |err| {
+        _ = func;
+        detours.attach(LoadLibraryW, &load_library_w.?) catch |err| {
             std.log.err("LoadLibraryW: failed to attach: {}", .{err});
             load_library_w = null;
             break :blk;
@@ -79,7 +81,8 @@ pub fn deinit() void {
     defer self = null;
 
     if (hooks.load_library_a) |*func| blk: {
-        detours.detach(LoadLibraryA, func) catch |err| {
+        _ = func;
+        detours.detach(LoadLibraryA, &hooks.load_library_a.?) catch |err| {
             std.log.err("LoadLibraryA: cannot detach: {}", .{err});
             break :blk;
         };
@@ -87,7 +90,8 @@ pub fn deinit() void {
     }
 
     if (hooks.load_library_w) |*func| blk: {
-        detours.detach(LoadLibraryW, func) catch |err| {
+        _ = func;
+        detours.detach(LoadLibraryW, &hooks.load_library_w.?) catch |err| {
             std.log.err("LoadLibraryW: cannot detach: {}", .{err});
             break :blk;
         };
@@ -95,13 +99,13 @@ pub fn deinit() void {
     }
 }
 
-fn LoadLibraryA(lpLibFileName: windows.LPCSTR) ?windows.HMODULE {
+fn LoadLibraryA(lpLibFileName: ?windows.LPCSTR) ?windows.HMODULE {
     const hooks = &self.?;
 
     const lib = hooks.load_library_a.?(lpLibFileName) orelse return null;
-    // const lib_name = mem.span(lpLibFileName);
+    const lib_name = mem.span(lpLibFileName orelse &[_:0]u8{0});
 
-    // std.log.debug("{s}", .{lib_name});
+    std.log.debug("{s}", .{lib_name});
 
     //if (mem.eql(u8, lib_name, "d3d11.dll")) {
         //hooks.mutex.lock();
@@ -116,13 +120,13 @@ fn LoadLibraryA(lpLibFileName: windows.LPCSTR) ?windows.HMODULE {
     return lib;
 }
 
-fn LoadLibraryW(lpLibFileName: windows.LPCWSTR) ?windows.HMODULE {
+fn LoadLibraryW(lpLibFileName: ?windows.LPCWSTR) ?windows.HMODULE {
     const hooks = &self.?;
 
     const lib = hooks.load_library_w.?(lpLibFileName) orelse return null;
-    // const lib_name = mem.span(lpLibFileName);
+    const lib_name = mem.span(lpLibFileName orelse &[_:0]u16{0});
 
-    // std.log.debug("{f}", .{std.unicode.fmtUtf16Le(lib_name)});
+    std.log.debug("{f}", .{std.unicode.fmtUtf16Le(lib_name)});
 
     //if (mem.eql(u16, lib_name, unicode.wtf8ToWtf16LeStringLiteral("d3d11.dll"))) {
         //hooks.mutex.lock();
