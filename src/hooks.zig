@@ -99,7 +99,7 @@ pub fn deinit() void {
     }
 }
 
-fn LoadLibraryA(lpLibFileName: ?windows.LPCSTR) ?windows.HMODULE {
+fn LoadLibraryA(lpLibFileName: ?windows.LPCSTR) callconv(.winapi) ?windows.HMODULE {
     const hooks = &self.?;
 
     const lib = hooks.load_library_a.?(lpLibFileName) orelse return null;
@@ -120,7 +120,7 @@ fn LoadLibraryA(lpLibFileName: ?windows.LPCSTR) ?windows.HMODULE {
     return lib;
 }
 
-fn LoadLibraryW(lpLibFileName: ?windows.LPCWSTR) ?windows.HMODULE {
+fn LoadLibraryW(lpLibFileName: ?windows.LPCWSTR) callconv(.winapi) ?windows.HMODULE {
     const hooks = &self.?;
 
     const lib = hooks.load_library_w.?(lpLibFileName) orelse return null;
