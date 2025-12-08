@@ -39,8 +39,7 @@ pub fn init() bool {
     });
 
     if (load_library_a) |*func| blk: {
-        _ = func;
-        detours.attach(LoadLibraryA, &load_library_a.?) catch |err| {
+        detours.attach(LoadLibraryA, func) catch |err| {
             std.log.err("LoadLibraryA: failed to attach: {}", .{err});
             load_library_a = null;
             break :blk;
@@ -54,8 +53,7 @@ pub fn init() bool {
     });
 
     if (load_library_w) |*func| blk: {
-        _ = func;
-        detours.attach(LoadLibraryW, &load_library_w.?) catch |err| {
+        detours.attach(LoadLibraryW, func) catch |err| {
             std.log.err("LoadLibraryW: failed to attach: {}", .{err});
             load_library_w = null;
             break :blk;
@@ -81,8 +79,7 @@ pub fn deinit() void {
     defer self = null;
 
     if (hooks.load_library_a) |*func| blk: {
-        _ = func;
-        detours.detach(LoadLibraryA, &hooks.load_library_a.?) catch |err| {
+        detours.detach(LoadLibraryA, func) catch |err| {
             std.log.err("LoadLibraryA: cannot detach: {}", .{err});
             break :blk;
         };
@@ -90,8 +87,7 @@ pub fn deinit() void {
     }
 
     if (hooks.load_library_w) |*func| blk: {
-        _ = func;
-        detours.detach(LoadLibraryW, &hooks.load_library_w.?) catch |err| {
+        detours.detach(LoadLibraryW, func) catch |err| {
             std.log.err("LoadLibraryW: cannot detach: {}", .{err});
             break :blk;
         };
@@ -103,7 +99,7 @@ fn LoadLibraryA(lpLibFileName: ?windows.LPCSTR) callconv(.winapi) ?windows.HMODU
     const hooks = &self.?;
 
     const lib = hooks.load_library_a.?(lpLibFileName) orelse return null;
-    const lib_name = mem.span(lpLibFileName orelse &[_:0]u8{0});
+    const lib_name = mem.span(lpLibFileName orelse unreachable);
 
     std.log.debug("{s}", .{lib_name});
 
@@ -124,7 +120,7 @@ fn LoadLibraryW(lpLibFileName: ?windows.LPCWSTR) callconv(.winapi) ?windows.HMOD
     const hooks = &self.?;
 
     const lib = hooks.load_library_w.?(lpLibFileName) orelse return null;
-    const lib_name = mem.span(lpLibFileName orelse &[_:0]u16{0});
+    const lib_name = mem.span(lpLibFileName orelse unreachable);
 
     std.log.debug("{f}", .{std.unicode.fmtUtf16Le(lib_name)});
 
