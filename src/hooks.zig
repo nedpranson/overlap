@@ -83,7 +83,7 @@ pub fn deinit() void {
             std.log.err("LoadLibraryA: cannot detach: {}", .{err});
             break :blk;
         };
-        std.log.err("LoadLibraryA: successfully deattached", .{});
+        std.log.info("LoadLibraryA: successfully deattached", .{});
     }
 
     if (hooks.load_library_w) |*func| blk: {
@@ -91,7 +91,7 @@ pub fn deinit() void {
             std.log.err("LoadLibraryW: cannot detach: {}", .{err});
             break :blk;
         };
-        std.log.err("LoadLibraryW: successfully deattached", .{});
+        std.log.info("LoadLibraryW: successfully deattached", .{});
     }
 }
 
@@ -99,9 +99,9 @@ fn LoadLibraryA(lpLibFileName: windows.LPCSTR) ?windows.HMODULE {
     const hooks = &self.?;
 
     const lib = hooks.load_library_a.?(lpLibFileName) orelse return null;
-    const lib_name = mem.span(lpLibFileName);
+    // const lib_name = mem.span(lpLibFileName);
 
-    std.log.debug("{s}", .{lib_name});
+    // std.log.debug("{s}", .{lib_name});
 
     //if (mem.eql(u8, lib_name, "d3d11.dll")) {
         //hooks.mutex.lock();
@@ -120,9 +120,9 @@ fn LoadLibraryW(lpLibFileName: windows.LPCWSTR) ?windows.HMODULE {
     const hooks = &self.?;
 
     const lib = hooks.load_library_w.?(lpLibFileName) orelse return null;
-    const lib_name = mem.span(lpLibFileName);
+    // const lib_name = mem.span(lpLibFileName);
 
-    std.log.debug("{f}", .{std.unicode.fmtUtf16Le(lib_name)});
+    // std.log.debug("{f}", .{std.unicode.fmtUtf16Le(lib_name)});
 
     //if (mem.eql(u16, lib_name, unicode.wtf8ToWtf16LeStringLiteral("d3d11.dll"))) {
         //hooks.mutex.lock();
