@@ -82,6 +82,8 @@ pub fn init() bool {
                 successes += 1;
                 std.log.info(hook_name ++ ": successfully hooked", .{});
             }
+        } else {
+            std.log.debug("mod '" ++ lib_name ++ "' not found", .{});
         }
     }
 
