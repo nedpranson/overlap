@@ -13,20 +13,27 @@ const assert = std.debug.assert;
 const Hooks = @This();
 
 mutex: Mutex = .{},
-established_hooks: EstablishedHooks = .{},
 
 load_library_a: ?*@TypeOf(LoadLibraryA),
 load_library_w: ?*@TypeOf(LoadLibraryW),
 
 var self: ?Hooks = null;
 
-// we could have like a static "hash_map" with set keys and values as a pointer
-const EstablishedHooks = packed struct {
-    d3d11: bool = false,
+// unordered!
+const hooks_map = std.StaticStringMap(Hook).initComptime(.{
+    .{ "d3d11.dll", d3d11.interface },
+});
+
+pub const Hook = struct {
+    attach: fn(lib: windows.HMODULE) bool,
+    detach: fn () void,
 };
 
+// hook FreeLibrary too!
 pub fn init() bool {
     assert(self == null);
+
+    var successes: std.math.IntFittingRange(0, hooks_map.keys().len + 2) = 0;
 
     const kernel32 = windows.GetModuleHandle("kernel32") orelse {
         std.log.err("kernel32: module not found", .{});
@@ -34,21 +41,22 @@ pub fn init() bool {
     };
 
     var load_library_a: ?*@TypeOf(LoadLibraryA) = @ptrCast(windows.GetProcAddress(kernel32, "LoadLibraryA") catch |err| blk: {
-        std.log.err("LoadLibraryA: failed to get proc address: {}", .{err});
+        std.log.err("kernel32: LoadLibraryA: failed to get proc address: {}", .{err});
         break :blk null;
     });
 
     if (load_library_a) |*func| blk: {
         detours.attach(LoadLibraryA, func) catch |err| {
-            std.log.err("LoadLibraryA: failed to attach: {}", .{err});
+            std.log.err("kernel32: LoadLibraryA: failed to attach: {}", .{err});
             load_library_a = null;
             break :blk;
         };
-        std.log.info("LoadLibraryA: successfully attached", .{});
+        std.log.info("kernel32: LoadLibraryA: successfully attached", .{});
+        successes += 1;
     }
 
     var load_library_w: ?*@TypeOf(LoadLibraryW) = @ptrCast(windows.GetProcAddress(kernel32, "LoadLibraryW") catch |err| blk: {
-        std.log.err("LoadLibraryW: failed to get proc address: {}", .{err});
+        std.log.err("kernel32: LoadLibraryW: failed to get proc address: {}", .{err});
         break :blk null;
     });
 
@@ -58,7 +66,23 @@ pub fn init() bool {
             load_library_w = null;
             break :blk;
         };
-        std.log.info("LoadLibraryW: successfully attached", .{});
+        std.log.info("kernel32: LoadLibraryW: successfully attached", .{});
+        successes += 1;
+    }
+
+    inline for (comptime hooks_map.keys()) |lib_name| {
+        const lib_name_z = (lib_name ++ "\x00")[0..lib_name.len: 0];
+        const hook_name = lib_name[0..lib_name.len - 4];
+
+        if (windows.GetModuleHandle(lib_name_z)) |mod| {
+            const hook = comptime hooks_map.get(lib_name).?;
+            if (hook.attach(mod)) {
+                std.log.info(hook_name ++ ": failed to hook", .{});
+            } else {
+                successes += 1;
+                std.log.info(hook_name ++ ": successfully hooked", .{});
+            }
+        }
     }
 
     self = .{
@@ -66,7 +90,7 @@ pub fn init() bool {
         .load_library_w = load_library_w,
     };
 
-    if (load_library_a == null and load_library_w == null) {
+    if (successes == 0) {
         deinit();
         return true;
     }
@@ -80,18 +104,22 @@ pub fn deinit() void {
 
     if (hooks.load_library_a) |*func| blk: {
         detours.detach(LoadLibraryA, func) catch |err| {
-            std.log.err("LoadLibraryA: cannot detach: {}", .{err});
+            std.log.err("kernel32: LoadLibraryA: cannot detach: {}", .{err});
             break :blk;
         };
-        std.log.info("LoadLibraryA: successfully deattached", .{});
+        std.log.info("kernel32: LoadLibraryA: successfully deattached", .{});
     }
 
     if (hooks.load_library_w) |*func| blk: {
         detours.detach(LoadLibraryW, func) catch |err| {
-            std.log.err("LoadLibraryW: cannot detach: {}", .{err});
+            std.log.err("kernel32: LoadLibraryW: cannot detach: {}", .{err});
             break :blk;
         };
-        std.log.info("LoadLibraryW: successfully deattached", .{});
+        std.log.info("kernel32: LoadLibraryW: successfully deattached", .{});
+    }
+
+    inline for (comptime hooks_map.values()) |hook| {
+        hook.detach();
     }
 }
 
@@ -99,9 +127,9 @@ fn LoadLibraryA(lpLibFileName: ?windows.LPCSTR) callconv(.winapi) ?windows.HMODU
     const hooks = &self.?;
 
     const lib = hooks.load_library_a.?(lpLibFileName) orelse return null;
-    const lib_name = mem.span(lpLibFileName orelse unreachable);
+    //const lib_name = mem.span(lpLibFileName orelse unreachable);
 
-    std.log.debug("{s}", .{lib_name});
+    //std.log.debug("{s}", .{lib_name});
 
     //if (mem.eql(u8, lib_name, "d3d11.dll")) {
         //hooks.mutex.lock();
@@ -120,9 +148,9 @@ fn LoadLibraryW(lpLibFileName: ?windows.LPCWSTR) callconv(.winapi) ?windows.HMOD
     const hooks = &self.?;
 
     const lib = hooks.load_library_w.?(lpLibFileName) orelse return null;
-    const lib_name = mem.span(lpLibFileName orelse unreachable);
+    //const lib_name = mem.span(lpLibFileName orelse unreachable);
 
-    std.log.debug("{f}", .{std.unicode.fmtUtf16Le(lib_name)});
+    //std.log.debug("{f}", .{std.unicode.fmtUtf16Le(lib_name)});
 
     //if (mem.eql(u16, lib_name, unicode.wtf8ToWtf16LeStringLiteral("d3d11.dll"))) {
         //hooks.mutex.lock();
@@ -135,22 +163,4 @@ fn LoadLibraryW(lpLibFileName: ?windows.LPCWSTR) callconv(.winapi) ?windows.HMOD
     //}
 
     return lib;
-}
-
-/// Returned handle should be destroyed with `windows.DestroyWindow` when no longer used.
-fn makeDummyWindow() windows.CreateWindowExError!windows.HWND {
-    return windows.CreateWindowEx(
-        0,
-        "STATIC",
-        "Overlap Dummy Window",
-        windows.WS_OVERLAPPEDWINDOW,
-        windows.CW_USEDEFAULT,
-        windows.CW_USEDEFAULT,
-        640,
-        480,
-        null,
-        null,
-        null,
-        null,
-    );
 }

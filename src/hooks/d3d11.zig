@@ -12,29 +12,56 @@ const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const Mutex = std.Thread.Mutex;
 
-mutex: *Mutex,
+const Hook = @This();
 
-//release: *@TypeOf(Release),
+pub const interface: hooks.Hook = .{
+    .attach = attach,
+    .detach = detach,
+};
+
 present: *@TypeOf(Present),
 resize_buffers: *@TypeOf(ResizeBuffers),
 
-const Hook = @This();
-
 var self: ?Hook = null;
 
-pub fn attach(d3d11_lib: windows.HMODULE, window: windows.HWND, mutex: *Mutex) !void {
-    assert(self == null);
+pub fn attach(d3d11_lib: windows.HMODULE) bool {
+    if (self != null) {
+        std.log.warn("d3d11: attach called when already attached", .{});
+        return true;
+    }
+
+    const window = windows.CreateWindowEx(
+        0,
+        "STATIC",
+        "Overlap Dummy Window",
+        windows.WS_OVERLAPPEDWINDOW,
+        windows.CW_USEDEFAULT,
+        windows.CW_USEDEFAULT,
+        640,
+        480,
+        null,
+        null,
+        null,
+        null,
+    ) catch |err| {
+        std.log.err("d3d11: could not make dummy window: {}", .{err});
+        return true;
+    };
+    defer windows.DestroyWindow(window);
 
     const D3D11CreateDeviceAndSwapChain = *const @TypeOf(d3d11.D3D11CreateDeviceAndSwapChain);
-    const d3d11_create_device_and_swap_chain: D3D11CreateDeviceAndSwapChain = @ptrCast(try windows.GetProcAddress(
+    const d3d11_create_device_and_swap_chain: D3D11CreateDeviceAndSwapChain = @ptrCast(windows.GetProcAddress(
         d3d11_lib,
         "D3D11CreateDeviceAndSwapChain",
-    ));
+    ) catch |err| {
+        std.log.err("d3d11: D3D11CreateDeviceAndSwapChain: failed to get proc address: {}", .{err});
+        return true;
+    });
 
     var sd = std.mem.zeroes(dxgi.DXGI_SWAP_CHAIN_DESC);
     sd.BufferCount = 1;
     sd.BufferDesc.Format = dxgi.DXGI_FORMAT_R8G8B8A8_UNORM;
-    sd.OutputWindow = window;
+    sd.OutputWindow = windows.GetForegroundWindow().?;
     sd.SampleDesc.Count = 1;
     sd.Windowed = windows.TRUE;
     sd.SwapEffect = dxgi.DXGI_SWAP_EFFECT_DISCARD;
@@ -67,34 +94,61 @@ pub fn attach(d3d11_lib: windows.HMODULE, window: windows.HWND, mutex: *Mutex) !
 
     switch (d3d11.D3D11_ERROR_CODE(hr)) {
         .S_OK => {},
-        else => |err| return d3d11.unexpectedError(err),
+        else => |err| {
+            std.log.err("d3d11: D3D11CreateDeviceAndSwapChain failed: {}", .{d3d11.unexpectedError(err)});
+            return true;
+        },
     }
 
     defer swap_chain.Release();
     defer device.Release();
     defer device_context.Release();
 
+    var cleanup = false;
+
     var present: *@TypeOf(Present) = @constCast(@ptrCast(swap_chain.vtable[8]));
     var resize_buffers: *@TypeOf(ResizeBuffers) = @constCast(@ptrCast(swap_chain.vtable[13]));
 
-    try detours.attach(Present, &present);
-    errdefer detours.detach(Present, &present) catch {};
+    detours.attach(Present, &present) catch |err| {
+        std.log.err("d3d11: Present: cannot detach: {}", .{err});
 
-    try detours.attach(ResizeBuffers, &resize_buffers);
-    errdefer detours.detach(ResizeBuffers, &resize_buffers) catch {};
+        cleanup = true;
+        return true;
+    };
+    defer if (cleanup) detours.detach(Present, &present) catch |err| {
+        std.log.err("d3d11: Present: cannot detach: {}", .{err});
+    };
 
+    detours.attach(ResizeBuffers, &resize_buffers) catch |err| {
+        std.log.err("d3d11: Present: cannot detach: {}", .{err});
+
+        cleanup = true;
+        return true;
+    };
+    defer if (cleanup) detours.detach(ResizeBuffers, &resize_buffers) catch |err| {
+        std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
+    };
+
+    assert(cleanup == false);
     self = .{
-        .mutex = mutex,
         .present = present,
         .resize_buffers = resize_buffers,
     };
+
+    return false;
 }
 
 pub fn detach() void {
-    const hook = &self.?;
+    const hook = &(self orelse return);
+    defer self = null;
 
-    detours.detach(Present, &hook.present) catch {};
-    detours.detach(ResizeBuffers, &hook.resize_buffers) catch {};
+    detours.detach(Present, &hook.present) catch |err| {
+        std.log.err("d3d11: Present: cannot detach: {}", .{err});
+    };
+
+    detours.detach(ResizeBuffers, &hook.resize_buffers) catch |err| {
+        std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
+    };
 }
 
 fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
@@ -109,30 +163,7 @@ fn Present(
     SyncInterval: windows.UINT,
     Flags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
-    // we do not need a global mutex just one that handles d3d11 i guess
     const hook = &self.?;
-
-    hook.mutex.lock();
-    defer hook.mutex.unlock();
-
-    const device = graphics.d3d11.Device.init(pSwapChain) catch |err| {
-        std.log.err("could not init d3d11 device: {}", .{err});
-        return hook.present(pSwapChain, SyncInterval, Flags);
-    };
-    defer device.deinit();
-
-    // kinad not bad of an idea just to init Gui on the stack
-    // as we will not need to worry about thread safety
-    const Gui = @import("../Gui2.zig");
-    var gui: Gui = .init;
-
-    @import("../main2.zig").render(&gui);
-
-    device.render(gui.draw_verticies.slice(), gui.draw_indecies.slice(), gui.draw_commands.slice()) catch |err| {
-        std.log.err("could not render d3d11 device: {}", .{err});
-        return hook.present(pSwapChain, SyncInterval, Flags);
-    };
-
     return hook.present(pSwapChain, SyncInterval, Flags);
 }
 
