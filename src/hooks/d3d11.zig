@@ -142,13 +142,17 @@ pub fn detach() void {
     const hook = &(self orelse return);
     defer self = null;
 
-    detours.detach(Present, &hook.present) catch |err| {
+    if (detours.detach(Present, &hook.present)) {
+        std.log.err("d3d11: Present: successfully deattached", .{});
+    } else |err| {
         std.log.err("d3d11: Present: cannot detach: {}", .{err});
-    };
+    }
 
-    detours.detach(ResizeBuffers, &hook.resize_buffers) catch |err| {
+    if (detours.detach(ResizeBuffers, &hook.resize_buffers)) {
+        std.log.err("d3d11: ResizeBuffers: successfully deattached", .{});
+    } else |err| {
         std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
-    };
+    }
 }
 
 fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
