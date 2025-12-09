@@ -85,6 +85,15 @@ pub fn init() bool {
         //}
     //}
 
+    if (windows.GetModuleHandle("d3d11.dll")) |lib| {
+        if (d3d11.attach(lib)) {
+            std.debug.print("d3d11 --", .{});
+        } else {
+            std.debug.print("d3d11 ++", .{});
+            successes += 1;
+        }
+    }
+
     self = .{
         .load_library_a = load_library_a,
         .load_library_w = load_library_w,
@@ -117,6 +126,8 @@ pub fn deinit() void {
         };
         std.log.info("kernel32: LoadLibraryW: successfully deattached", .{});
     }
+
+    d3d11.detach();
 
     // inline for (comptime hooks_map.values()) |hook| {
         // hook.detach();

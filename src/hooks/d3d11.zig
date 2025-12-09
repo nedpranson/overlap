@@ -25,10 +25,11 @@ resize_buffers: *@TypeOf(ResizeBuffers),
 var self: ?Hook = null;
 
 pub fn attach(d3d11_lib: windows.HMODULE) bool {
-    if (self != null) {
-        std.log.warn("d3d11: attach called when already attached", .{});
-        return true;
-    }
+    //if (self != null) {
+        //std.log.warn("d3d11: attach called when already attached", .{});
+        //return true;
+    //}
+    assert(self == null);
 
     const window = windows.CreateWindowEx(
         0,
@@ -143,7 +144,7 @@ pub fn attach(d3d11_lib: windows.HMODULE) bool {
 }
 
 pub fn detach() void {
-    const hook = &(self orelse return);
+    const hook = &self.?;
     defer self = null;
 
     if (detours.detach(Present, &hook.present)) {
