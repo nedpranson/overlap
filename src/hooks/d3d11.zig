@@ -109,22 +109,26 @@ pub fn attach(d3d11_lib: windows.HMODULE) bool {
     var present: *@TypeOf(Present) = @constCast(@ptrCast(swap_chain.vtable[8]));
     var resize_buffers: *@TypeOf(ResizeBuffers) = @constCast(@ptrCast(swap_chain.vtable[13]));
 
-    detours.attach(Present, &present) catch |err| {
-        std.log.err("d3d11: Present: cannot detach: {}", .{err});
+    if (detours.attach(Present, &present)) {
+        std.log.info("d3d11: Present: successfully attached", .{});
+    } else |err| {
+        std.log.err("d3d11: Present: failed to attach: {}", .{err});
 
         cleanup = true;
         return true;
-    };
+    }
     defer if (cleanup) detours.detach(Present, &present) catch |err| {
         std.log.err("d3d11: Present: cannot detach: {}", .{err});
     };
 
-    detours.attach(ResizeBuffers, &resize_buffers) catch |err| {
-        std.log.err("d3d11: Present: cannot detach: {}", .{err});
+    if (detours.attach(ResizeBuffers, &resize_buffers)) {
+        std.log.info("d3d11: ResizeBuffers: successfully attached", .{});
+    } else |err| {
+        std.log.err("d3d11: Present: failed to attach: {}", .{err});
 
         cleanup = true;
         return true;
-    };
+    }
     defer if (cleanup) detours.detach(ResizeBuffers, &resize_buffers) catch |err| {
         std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
     };
@@ -143,13 +147,13 @@ pub fn detach() void {
     defer self = null;
 
     if (detours.detach(Present, &hook.present)) {
-        std.log.err("d3d11: Present: successfully deattached", .{});
+        std.log.info("d3d11: Present: successfully deattached", .{});
     } else |err| {
         std.log.err("d3d11: Present: cannot detach: {}", .{err});
     }
 
     if (detours.detach(ResizeBuffers, &hook.resize_buffers)) {
-        std.log.err("d3d11: ResizeBuffers: successfully deattached", .{});
+        std.log.info("d3d11: ResizeBuffers: successfully deattached", .{});
     } else |err| {
         std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
     }
