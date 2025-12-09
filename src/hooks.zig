@@ -70,20 +70,20 @@ pub fn init() bool {
         successes += 1;
     }
 
-    inline for (comptime hooks_map.keys()) |lib_name| {
-        const lib_name_z = (lib_name ++ "\x00")[0..lib_name.len: 0];
-        const hook_name = lib_name[0..lib_name.len - 4];
+    // inline for (comptime hooks_map.keys()) |lib_name| {
+        //const lib_name_z = (lib_name ++ "\x00")[0..lib_name.len: 0];
+        //const hook_name = lib_name[0..lib_name.len - 4];
 
-        if (windows.GetModuleHandle(lib_name_z)) |mod| {
-            const hook = comptime hooks_map.get(lib_name).?;
-            if (hook.attach(mod)) {
-                std.log.info(hook_name ++ ": failed to hook", .{});
-            } else {
-                successes += 1;
-                std.log.info(hook_name ++ ": successfully hooked", .{});
-            }
-        }
-    }
+        //if (windows.GetModuleHandle(lib_name_z)) |mod| {
+            //const hook = comptime hooks_map.get(lib_name).?;
+            //if (hook.attach(mod)) {
+                //std.log.info(hook_name ++ ": failed to hook", .{});
+            //} else {
+                //std.log.info(hook_name ++ ": successfully hooked", .{});
+                //successes += 1;
+            //}
+        //}
+    //}
 
     self = .{
         .load_library_a = load_library_a,
@@ -118,9 +118,9 @@ pub fn deinit() void {
         std.log.info("kernel32: LoadLibraryW: successfully deattached", .{});
     }
 
-    inline for (comptime hooks_map.values()) |hook| {
-        hook.detach();
-    }
+    // inline for (comptime hooks_map.values()) |hook| {
+        // hook.detach();
+    // }
 }
 
 fn LoadLibraryA(lpLibFileName: ?windows.LPCSTR) callconv(.winapi) ?windows.HMODULE {

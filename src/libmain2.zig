@@ -5,6 +5,8 @@ const hooks = @import("hooks.zig");
 
 // maybe return like an error.Failed or smth so cleanup would not be called
 fn setup() bool {
+    windows.AllocConsole() catch {};
+
     std.log.info("prepare them hooks and state...", .{});
 
     if (hooks.init()) return true;
