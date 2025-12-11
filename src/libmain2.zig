@@ -6,10 +6,7 @@ const hooks = @import("hooks.zig");
 // maybe return like an error.Failed or smth so cleanup would not be called
 fn setup() bool {
     std.log.info("prepare them hooks and state...", .{});
-
-    if (hooks.init()) return true;
-
-    return false;
+    return hooks.init();
 }
 
 fn cleanup() void {
@@ -20,14 +17,14 @@ fn cleanup() void {
 var enabled: std.atomic.Value(bool) = .init(false);
 
 var mutex: std.Thread.Mutex = .{};
-var failure = false;
+var success = false;
 
 pub export fn __overlap_hook_proc(code: c_int, wParam: windows.WPARAM, lParam: windows.LPARAM) callconv(.winapi) windows.LRESULT {
     if (isTargetProcess() and enabled.cmpxchgStrong(false, true, .acq_rel, .monotonic) == null) {
         mutex.lock();
         defer mutex.unlock();
 
-        failure = @call(.always_inline, setup, .{});
+        success = @call(.always_inline, setup, .{});
     }
 
     return windows.user32.CallNextHookEx(null, code, wParam, lParam);
@@ -41,7 +38,7 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
         mutex.lock();
         defer mutex.unlock();
 
-        if (!failure) {
+        if (success) {
             // calling winapi inside DllMain is 'forbidden'
             @call(.always_inline, cleanup, .{});
         }

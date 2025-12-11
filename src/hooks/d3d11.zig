@@ -22,14 +22,13 @@ pub const interface: hooks.Hook = .{
 present: *@TypeOf(Present),
 resize_buffers: *@TypeOf(ResizeBuffers),
 
+// bug is present is called when self is still null
 var self: ?Hook = null;
 
 pub fn attach(d3d11_lib: windows.HMODULE) bool {
-    //if (self != null) {
-        //std.log.warn("d3d11: attach called when already attached", .{});
-        //return true;
-    //}
     assert(self == null);
+
+    var failure = true;
 
     const window = windows.CreateWindowEx(
         0,
@@ -46,7 +45,7 @@ pub fn attach(d3d11_lib: windows.HMODULE) bool {
         null,
     ) catch |err| {
         std.log.err("d3d11: could not make dummy window: {}", .{err});
-        return true;
+        return false;
     };
     defer windows.DestroyWindow(window);
 
@@ -56,7 +55,7 @@ pub fn attach(d3d11_lib: windows.HMODULE) bool {
         "D3D11CreateDeviceAndSwapChain",
     ) catch |err| {
         std.log.err("d3d11: D3D11CreateDeviceAndSwapChain: failed to get proc address: {}", .{err});
-        return true;
+        return false;
     });
 
     var sd = std.mem.zeroes(dxgi.DXGI_SWAP_CHAIN_DESC);
@@ -97,7 +96,7 @@ pub fn attach(d3d11_lib: windows.HMODULE) bool {
         .S_OK => {},
         else => |err| {
             std.log.err("d3d11: D3D11CreateDeviceAndSwapChain failed: {}", .{d3d11.unexpectedError(err)});
-            return true;
+            return false;
         },
     }
 
@@ -105,59 +104,89 @@ pub fn attach(d3d11_lib: windows.HMODULE) bool {
     defer device.Release();
     defer device_context.Release();
 
-    var cleanup = false;
-
     var present: *@TypeOf(Present) = @constCast(@ptrCast(swap_chain.vtable[8]));
     var resize_buffers: *@TypeOf(ResizeBuffers) = @constCast(@ptrCast(swap_chain.vtable[13]));
 
-    if (detours.attach(Present, &present)) {
-        std.log.info("d3d11: Present: successfully attached", .{});
-    } else |err| {
-        std.log.err("d3d11: Present: failed to attach: {}", .{err});
-
-        cleanup = true;
-        return true;
-    }
-    defer if (cleanup) detours.detach(Present, &present) catch |err| {
-        std.log.err("d3d11: Present: cannot detach: {}", .{err});
+    detours.TransactionBegin() catch |err| {
+        std.log.err("d3d11: could not begin the transaction: {}", .{err});
+        return false;
     };
 
-    if (detours.attach(ResizeBuffers, &resize_buffers)) {
-        std.log.info("d3d11: ResizeBuffers: successfully attached", .{});
-    } else |err| {
-        std.log.err("d3d11: Present: failed to attach: {}", .{err});
+    {
+        // we dont need this defer tbf
+        defer if (failure) {
+            detours.TransactionAbort() catch {};
+        };
 
-        cleanup = true;
-        return true;
+        if (detours.Attach(Present, &present)) {
+            std.log.info("d3d11: Present: successfully attached", .{});
+        } else |err| {
+            std.log.err("d3d11: Present: failed to attach: {}", .{err});
+            return false;
+        }
+
+        if (detours.Attach(ResizeBuffers, &resize_buffers)) {
+            std.log.info("d3d11: ResizeBuffers: successfully attached", .{});
+        } else |err| {
+            std.log.err("d3d11: ResizeBuffers: failed to attach: {}", .{err});
+            return false;
+        }
     }
-    defer if (cleanup) detours.detach(ResizeBuffers, &resize_buffers) catch |err| {
-        std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
-    };
 
-    assert(cleanup == false);
     self = .{
         .present = present,
         .resize_buffers = resize_buffers,
     };
 
-    return false;
+    detours.TransactionCommit() catch |err| {
+        std.log.err("d3d11: could not commit the transaction: {}", .{err});
+
+        self = null;
+        return false;
+    };
+    defer if (failure) detach();
+
+    failure = false;
+    return true;
 }
 
 pub fn detach() void {
     const hook = &self.?;
     defer self = null;
 
-    if (detours.detach(Present, &hook.present)) {
-        std.log.info("d3d11: Present: successfully deattached", .{});
-    } else |err| {
-        std.log.err("d3d11: Present: cannot detach: {}", .{err});
-    }
+    blk: {
+        detours.TransactionBegin() catch |err| {
+            std.log.err("d3d11: could not commit the transaction: {}", .{err});
+            break :blk;
+        };
 
-    if (detours.detach(ResizeBuffers, &hook.resize_buffers)) {
-        std.log.info("d3d11: ResizeBuffers: successfully deattached", .{});
-    } else |err| {
-        std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
+        if (detours.Detach(Present, &hook.present)) {
+            std.log.info("d3d11: Present: successfully deattached", .{});
+        } else |err| {
+            std.log.err("d3d11: Present: cannot detach: {}", .{err});
+
+            detours.TransactionAbort() catch {};
+            break :blk;
+        }
+
+        if (detours.Detach(ResizeBuffers, &hook.resize_buffers)) {
+            std.log.info("d3d11: ResizeBuffers: successfully deattached", .{});
+        } else |err| {
+            std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
+
+            detours.TransactionAbort() catch {};
+            break :blk;
+        }
+
+        detours.TransactionCommit() catch |err| {
+            std.log.err("d3d11: could not commit the transaction: {}", .{err});
+            break :blk;
+        };
     }
+}
+
+pub fn active() bool {
+    return self != null;
 }
 
 fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
