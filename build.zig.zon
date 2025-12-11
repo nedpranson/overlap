@@ -12,10 +12,6 @@
             .url = "git+https://github.com/microsoft/Detours#9764cebcb1a75940e68fa83d6730ffaf0f669401",
             .hash = "N-V-__8AAAfkMgCNRxHobeqrxL6ubJ61-7pLSJ4AdbnP9CJe",
         },
-        .ziglangSet = .{
-            .url = "git+https://github.com/deckarep/ziglang-set#d63232266deb61c334da8f198e32a3fb51012650",
-            .hash = "ziglangSet-0.0.1-VUjv0hoUAgAxi3Zu4l_6QRnST7KqzKJW9n0FV1WKfweT",
-        },
     },
     .paths = .{
         "build.zig",

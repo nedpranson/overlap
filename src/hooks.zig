@@ -47,43 +47,45 @@ pub fn init() bool {
     var load_library_a: *@TypeOf(LoadLibraryA) = undefined;
     var load_library_w: *@TypeOf(LoadLibraryW) = undefined;
 
-    {
-        defer if (failure) {
+    // when adding even one more func we could do comptime magic
+    // to generate these functions
+
+    if (windows.GetProcAddress(kernel32, "LoadLibraryA")) |proc| {
+        var ptr: *@TypeOf(LoadLibraryA) = @ptrCast(proc);
+
+        detours.Attach(LoadLibraryA, &ptr) catch |err| {
+            std.log.err("kernel32: LoadLibraryA: failed to attach: {}", .{err});
+
             detours.TransactionAbort() catch {};
+            return false;
         };
 
-        // when adding even one more func we could do comptime magic
-        // to generate these functions
+        std.log.info("kernel32: LoadLibraryA: successfully attached", .{});
+        load_library_a = ptr;
+    } else |err| {
+        std.log.err("kernel32: LoadLibraryA: failed to get proc address: {}", .{err});
 
-        if (windows.GetProcAddress(kernel32, "LoadLibraryA")) |proc| {
-            var ptr: *@TypeOf(LoadLibraryA) = @ptrCast(proc);
+        detours.TransactionAbort() catch {};
+        return false;
+    }
 
-            detours.Attach(LoadLibraryA, &ptr) catch |err| {
-                std.log.err("kernel32: LoadLibraryA: failed to attach: {}", .{err});
-                return false;
-            };
+    if (windows.GetProcAddress(kernel32, "LoadLibraryW")) |proc| {
+        var ptr: *@TypeOf(LoadLibraryW) = @ptrCast(proc);
 
-            std.log.info("kernel32: LoadLibraryA: successfully attached", .{});
-            load_library_a = ptr;
-        } else |err| {
-            std.log.err("kernel32: LoadLibraryA: failed to get proc address: {}", .{err});
+        detours.Attach(LoadLibraryW, &ptr) catch |err| {
+            std.log.err("kernel32: LoadLibraryW: failed to attach: {}", .{err});
+
+            detours.TransactionAbort() catch {};
             return false;
-        }
+        };
 
-        if (windows.GetProcAddress(kernel32, "LoadLibraryW")) |proc| {
-            var ptr: *@TypeOf(LoadLibraryW) = @ptrCast(proc);
+        std.log.info("kernel32: LoadLibraryW: successfully attached", .{});
+        load_library_w = ptr;
+    } else |err| {
+        std.log.err("kernel32: LoadLibraryW: failed to get proc address: {}", .{err});
 
-            detours.Attach(LoadLibraryW, &ptr) catch |err| {
-                std.log.err("kernel32: LoadLibraryW: failed to attach: {}", .{err});
-                return false;
-            };
-
-            std.log.info("kernel32: LoadLibraryW: successfully attached", .{});
-            load_library_w = ptr;
-        } else |err| {
-            std.log.err("kernel32: LoadLibraryW: failed to get proc address: {}", .{err});
-            return false;
-        }
+        detours.TransactionAbort() catch {};
+        return false;
     }
 
 

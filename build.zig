@@ -10,11 +10,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const set = b.dependency("ziglangSet", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
     const lib_mod = b.createModule(.{
         .root_source_file = b.path("src/libmain2.zig"),
         .target = target,
@@ -28,7 +23,6 @@ pub fn build(b: *std.Build) void {
     });
 
     lib.root_module.addImport("fat", fat.module("fat"));
-    lib.root_module.addImport("set", set.module("ziglangSet"));
 
     const detours = libdetours.buildLibrary(b, .{
         .target = target,

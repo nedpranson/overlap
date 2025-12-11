@@ -112,25 +112,22 @@ pub fn attach(d3d11_lib: windows.HMODULE) bool {
         return false;
     };
 
-    {
-        // we dont need this defer tbf
-        defer if (failure) {
-            detours.TransactionAbort() catch {};
-        };
+    if (detours.Attach(Present, &present)) {
+        std.log.info("d3d11: Present: successfully attached", .{});
+    } else |err| {
+        std.log.err("d3d11: Present: failed to attach: {}", .{err});
 
-        if (detours.Attach(Present, &present)) {
-            std.log.info("d3d11: Present: successfully attached", .{});
-        } else |err| {
-            std.log.err("d3d11: Present: failed to attach: {}", .{err});
-            return false;
-        }
+        detours.TransactionAbort() catch {};
+        return false;
+    }
 
-        if (detours.Attach(ResizeBuffers, &resize_buffers)) {
-            std.log.info("d3d11: ResizeBuffers: successfully attached", .{});
-        } else |err| {
-            std.log.err("d3d11: ResizeBuffers: failed to attach: {}", .{err});
-            return false;
-        }
+    if (detours.Attach(ResizeBuffers, &resize_buffers)) {
+        std.log.info("d3d11: ResizeBuffers: successfully attached", .{});
+    } else |err| {
+        std.log.err("d3d11: ResizeBuffers: failed to attach: {}", .{err});
+
+        detours.TransactionAbort() catch {};
+        return false;
     }
 
     self = .{
