@@ -32,21 +32,24 @@ pub fn init() bool {
         return false;
     };
 
+    defer if (failure) {
+        load_library_a = undefined;
+        load_library_w = undefined;
+    };
+
     if (windows.GetProcAddress(kernel32, "LoadLibraryA")) |proc| {
         load_library_a = @ptrCast(proc);
         detours.attach(LoadLibraryA, &load_library_a) catch |err| {
             std.log.err("kernel32: LoadLibraryA: failed to attach: {}", .{err});
             return false;
         };
+        std.log.info("kernel32: LoadLibraryA: successfully attached", .{});
     } else |err| {
         std.log.err("kernel32: LoadLibraryA: failed to get proc address: {}", .{err});
         return false;
     }
-    defer if (failure) {
-        detours.detach(LoadLibraryA, &load_library_a) catch |err| {
-            std.log.err("kernel32: LoadLibraryA: cannot detach: {}", .{err});
-        };
-        load_library_a = undefined;
+    defer if (failure) detours.detach(LoadLibraryA, &load_library_a) catch |err| {
+        std.log.err("kernel32: LoadLibraryA: cannot detach: {}", .{err});
     };
 
     if (windows.GetProcAddress(kernel32, "LoadLibraryW")) |proc| {
@@ -55,22 +58,20 @@ pub fn init() bool {
             std.log.err("kernel32: LoadLibraryW: failed to attach: {}", .{err});
             return false;
         };
+        std.log.info("kernel32: LoadLibraryW: successfully attached", .{});
     } else |err| {
         std.log.err("kernel32: LoadLibraryW: failed to get proc address: {}", .{err});
         return false;
     }
-    defer if (failure) {
-        detours.detach(LoadLibraryW, &load_library_w) catch |err| {
-            std.log.err("kernel32: LoadLibraryW: cannot detach: {}", .{err});
-        };
-        load_library_w = undefined;
+    defer if (failure) detours.detach(LoadLibraryW, &load_library_w) catch |err| {
+        std.log.err("kernel32: LoadLibraryW: cannot detach: {}", .{err});
     };
 
     mutex.lock();
     defer mutex.unlock();
 
     if (windows.GetModuleHandle("d3d11.dll")) |mod| {
-        if (!d3d11.attach(mod)) return false;
+        _ = d3d11.attach(mod);
     }
 
     failure = false;

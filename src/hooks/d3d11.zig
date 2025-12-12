@@ -106,26 +106,29 @@ pub fn attach(d3d11_lib: windows.HMODULE) bool {
     present = @constCast(@ptrCast(swap_chain.vtable[8]));
     resize_buffers = @constCast(@ptrCast(swap_chain.vtable[13]));
 
+    defer if (failure) {
+        present = undefined;
+        resize_buffers = undefined;
+    };
+
     detours.attach(Present, &present) catch |err| {
         std.log.err("d3d11: Present: failed to attach: {}", .{err});
         return false;
     };
-    defer if (failure) {
-        detours.detach(Present, &present) catch |err| {
-            std.log.err("d3d11: Present: cannot detach: {}", .{err});
-        };
-        present = undefined;
+    std.log.info("d3d11: Present: successfully attached", .{});
+
+    defer if (failure) detours.detach(Present, &present) catch |err| {
+        std.log.err("d3d11: Present: cannot detach: {}", .{err});
     };
 
     detours.attach(ResizeBuffers, &resize_buffers) catch |err| {
         std.log.err("d3d11: ResizeBuffers: failed to attach: {}", .{err});
         return false;
     };
-    defer if (failure) {
-        detours.detach(ResizeBuffers, &resize_buffers) catch |err| {
-            std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
-        };
-        resize_buffers = undefined;
+    std.log.info("d3d11: ResizeBuffers: successfully attached", .{});
+
+    defer if (failure) detours.detach(ResizeBuffers, &resize_buffers) catch |err| {
+        std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
     };
 
     failure = false;
