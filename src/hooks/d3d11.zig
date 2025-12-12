@@ -1,5 +1,4 @@
 const std = @import("std");
-const set = @import("set");
 const windows = @import("../windows.zig");
 const detours = @import("../detours.zig");
 const hooks = @import("../hooks.zig");
@@ -163,11 +162,22 @@ fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
     return 0;
 }
 
+// point is so we that we only pass instructions what and where to draw
+// and it is up to the backend/hook impl to draw it
+
 fn Present(
     pSwapChain: *dxgi.IDXGISwapChain,
     SyncInterval: windows.UINT,
     Flags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
+    const device = graphics.d3d11.Device.init(pSwapChain) catch unreachable;
+    defer device.deinit();
+
+    var gui: @import("../Gui2.zig") = .init;
+    @import("../main2.zig").render(&gui);
+
+    device.render(gui.draw_verticies.slice(), gui.draw_indecies.slice(), gui.draw_commands.slice()) catch unreachable;
+
     return present(pSwapChain, SyncInterval, Flags);
 }
 
