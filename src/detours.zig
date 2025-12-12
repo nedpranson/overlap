@@ -94,3 +94,25 @@ pub fn Detach(comptime Detour: anytype, ppPointer: **@TypeOf(Detour)) DetachErro
         else => |e| return windows.unexpectedError(e),
     };
 }
+
+pub fn attach(comptime Detour: anytype, ppPointer: **@TypeOf(Detour)) !void {
+    try TransactionBegin();
+
+    Attach(Detour, ppPointer) catch |err| {
+        TransactionAbort() catch {};
+        return err;
+    };
+
+    try TransactionCommit();
+}
+
+pub fn detach(comptime Detour: anytype, ppPointer: **@TypeOf(Detour)) !void {
+    try TransactionBegin();
+
+    Detach(Detour, ppPointer) catch |err| {
+        TransactionAbort() catch {};
+        return err;
+    };
+
+    try TransactionCommit();
+}
