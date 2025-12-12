@@ -99,40 +99,32 @@ pub fn deinit() void {
     }
 }
 
-fn LoadLibraryA(lpLibFileName: ?windows.LPCSTR) callconv(.winapi) ?windows.HMODULE {
+fn LoadLibraryA(lpLibFileName: windows.LPCSTR) callconv(.winapi) ?windows.HMODULE {
     const lib = load_library_a(lpLibFileName) orelse return null;
-    //const lib_name = mem.span(lpLibFileName orelse unreachable);
+    const lib_name = mem.span(lpLibFileName);
 
-    //std.log.debug("{s}", .{lib_name});
+    if (mem.eql(u8, lib_name, "d3d11.dll")) {
+        mutex.lock();
+        defer mutex.unlock();
 
-    //if (mem.eql(u8, lib_name, "d3d11.dll")) {
-        //hooks.mutex.lock();
-        //defer hooks.mutex.unlock();
-
-        //const window = makeDummyWindow() catch unreachable;
-        //defer windows.DestroyWindow(window);
-
-        //d3d11.attach(lib, window, &hooks.mutex) catch unreachable;
-    //}
+        // TODO: Unsafe
+        _ = d3d11.attach(lib);
+    }
 
     return lib;
 }
 
-fn LoadLibraryW(lpLibFileName: ?windows.LPCWSTR) callconv(.winapi) ?windows.HMODULE {
+fn LoadLibraryW(lpLibFileName: windows.LPCWSTR) callconv(.winapi) ?windows.HMODULE {
     const lib = load_library_w(lpLibFileName) orelse return null;
-    //const lib_name = mem.span(lpLibFileName orelse unreachable);
+    const lib_name = mem.span(lpLibFileName);
 
-    //std.log.debug("{f}", .{std.unicode.fmtUtf16Le(lib_name)});
+    if (mem.eql(u16, lib_name, unicode.wtf8ToWtf16LeStringLiteral("d3d11.dll"))) {
+        mutex.lock();
+        defer mutex.unlock();
 
-    //if (mem.eql(u16, lib_name, unicode.wtf8ToWtf16LeStringLiteral("d3d11.dll"))) {
-        //hooks.mutex.lock();
-        //defer hooks.mutex.unlock();
-
-        //const window = makeDummyWindow() catch unreachable;
-        //defer windows.DestroyWindow(window);
-
-        //d3d11.attach(lib, window, &hooks.mutex) catch unreachable;
-    //}
+        // TODO: Unsafe
+        _ = d3d11.attach(lib);
+    }
 
     return lib;
 }
