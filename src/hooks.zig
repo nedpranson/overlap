@@ -53,7 +53,7 @@ pub fn init() bool {
     };
 
     if (windows.GetProcAddress(kernel32, "LoadLibraryW")) |proc| {
-        load_library_a = @ptrCast(proc);
+        load_library_w = @ptrCast(proc);
         detours.attach(LoadLibraryW, &load_library_w) catch |err| {
             std.log.err("kernel32: LoadLibraryW: failed to attach: {}", .{err});
             return false;
