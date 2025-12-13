@@ -6,6 +6,8 @@ pub fn setup() !void {
 pub fn cleanup() void {
 }
 
+// now how can we make images indipendent?
+// so same rendering code would work for d3d11, opengl, vulkan
 pub fn render(gui: *Gui) void {
     const pos = &[2]f32{ 24.0, 24.0 };
 

@@ -9,7 +9,7 @@ const dxgi = windows.dxgi;
 const d3dcommon = windows.d3dcommon;
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
-const Mutex = std.Thread.Mutex;
+const Thread = std.Thread;
 
 const Hook = @This();
 
@@ -17,6 +17,10 @@ pub const interface: hooks.Hook = .{
     .attach = attach,
     .detach = detach,
 };
+
+var mutex: Thread.Mutex = .{};
+
+var device_map: std.AutoArrayHashMapUnmanaged(*dxgi.IDXGISwapChain, graphics.d3d11.Device) = .empty;
 
 var present: *@TypeOf(Present) = undefined;
 var resize_buffers: *@TypeOf(ResizeBuffers) = undefined;
@@ -102,6 +106,8 @@ pub fn attach(d3d11_lib: windows.HMODULE) bool {
 
     var failure = true;
 
+    device_map = .empty;
+
     present = @constCast(@ptrCast(swap_chain.vtable[8]));
     resize_buffers = @constCast(@ptrCast(swap_chain.vtable[13]));
 
@@ -149,6 +155,11 @@ pub fn detach() void {
     detours.detach(ResizeBuffers, &resize_buffers) catch |err| {
         std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
     };
+
+    for (device_map.values()) |device| {
+        device.deinit();
+    }
+    device_map.deinit(std.heap.page_allocator);
 }
 
 pub fn active() bool {
@@ -156,26 +167,49 @@ pub fn active() bool {
 }
 
 fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
-    _ = pIUnknown;
+    mutex.lock();
+    if (device_map.fetchSwapRemove(@ptrCast(pIUnknown))) |kv| {
+        kv.value.deinit();
+    }
+    mutex.unlock();
+
     //const refs = global.?.release(pIUnknown);
     //return refs;
+
     return 0;
 }
 
 // point is so we that we only pass instructions what and where to draw
 // and it is up to the backend/hook impl to draw it
 
+
 fn Present(
     pSwapChain: *dxgi.IDXGISwapChain,
     SyncInterval: windows.UINT,
     Flags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
-    const device = graphics.d3d11.Device.init(pSwapChain) catch unreachable;
-    defer device.deinit();
+    const device = blk: {
+        mutex.lock();
+        defer mutex.unlock();
+
+        if (!device_map.contains(pSwapChain)) {
+            const d = graphics.d3d11.Device.init(pSwapChain) catch {
+                return present(pSwapChain, SyncInterval, Flags);
+            };
+
+            device_map.put(std.heap.page_allocator, pSwapChain, d) catch {
+                d.deinit();
+                return present(pSwapChain, SyncInterval, Flags);
+            };
+        }
+
+        break :blk device_map.get(pSwapChain).?;
+    };
 
     var gui: @import("../Gui2.zig") = .init;
     @import("../main2.zig").render(&gui);
 
+    // if errors just remove it
     device.render(gui.draw_verticies.slice(), gui.draw_indecies.slice(), gui.draw_commands.slice()) catch unreachable;
 
     return present(pSwapChain, SyncInterval, Flags);
@@ -189,6 +223,24 @@ fn ResizeBuffers(
     NewFormat: dxgi.DXGI_FORMAT,
     SwapChainFlags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
+    mutex.lock();
+    if (device_map.fetchSwapRemove(@ptrCast(pSwapChain))) |kv| {
+        kv.value.deinit();
+    }
+    mutex.unlock();
+
     const hr = resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+
+    if (hr == windows.S_OK) {
+        const device = graphics.d3d11.Device.init(pSwapChain) catch {
+            return hr;
+        };
+
+        mutex.lock();
+        defer mutex.unlock();
+
+        device_map.putAssumeCapacity(pSwapChain, device);
+    }
+
     return hr;
 }
