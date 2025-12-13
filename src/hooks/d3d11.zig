@@ -30,6 +30,8 @@ var hooked = false;
 pub fn attach(d3d11_lib: windows.HMODULE) bool {
     assert(hooked == false);
 
+    windows.AllocConsole() catch {};
+
     const window = windows.CreateWindowEx(
         0,
         "STATIC",
@@ -182,6 +184,9 @@ fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
 // point is so we that we only pass instructions what and where to draw
 // and it is up to the backend/hook impl to draw it
 
+// for handling image resources we can do like
+// key as ptr to Image
+// and we can add an event like make/destroy image and do some stuff based on it idk
 
 fn Present(
     pSwapChain: *dxgi.IDXGISwapChain,
@@ -210,7 +215,10 @@ fn Present(
     @import("../main2.zig").render(&gui);
 
     // if errors just remove it
-    device.render(gui.draw_verticies.slice(), gui.draw_indecies.slice(), gui.draw_commands.slice()) catch unreachable;
+    // now question is it safe to call render not wrapped inside a mutex
+    device.render(gui.draw_verticies.slice(), gui.draw_indecies.slice(), gui.draw_commands.slice()) catch |err| {
+        std.log.err("render failed: {}", .{err});
+    };
 
     return present(pSwapChain, SyncInterval, Flags);
 }
