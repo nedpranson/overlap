@@ -208,7 +208,7 @@ fn Present(
             };
         }
 
-        break :blk device_map.get(pSwapChain).?;
+        break :blk device_map.getPtr(pSwapChain).?;
     };
 
     var gui: @import("../Gui2.zig") = .init;
@@ -232,10 +232,14 @@ fn ResizeBuffers(
     SwapChainFlags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
     mutex.lock();
+
     if (device_map.fetchSwapRemove(@ptrCast(pSwapChain))) |kv| {
+        mutex.unlock();
         kv.value.deinit();
+    } else {
+        mutex.unlock();
+        return resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
     }
-    mutex.unlock();
 
     const hr = resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
 
