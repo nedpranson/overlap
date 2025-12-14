@@ -3,6 +3,8 @@ const windows = @import("../windows.zig");
 const detours = @import("../detours.zig");
 const hooks = @import("../hooks.zig");
 const graphics = @import("../graphics.zig");
+const Gui = @import("../Gui2.zig");
+const renderer = @import("../renderer.zig");
 
 const d3d11 = windows.d3d11;
 const dxgi = windows.dxgi;
@@ -10,8 +12,6 @@ const d3dcommon = windows.d3dcommon;
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
-
-const Hook = @This();
 
 pub const interface: hooks.Hook = .{
     .attach = attach,
@@ -195,27 +195,34 @@ fn Present(
 ) callconv(.winapi) windows.HRESULT {
     const device = blk: {
         mutex.lock();
-        defer mutex.unlock();
 
-        if (!device_map.contains(pSwapChain)) {
-            const d = graphics.d3d11.Device.init(pSwapChain) catch {
-                return present(pSwapChain, SyncInterval, Flags);
-            };
+        if (device_map.get(pSwapChain)) |device| {
+            @branchHint(.likely);
 
-            device_map.put(std.heap.page_allocator, pSwapChain, d) catch {
-                d.deinit();
-                return present(pSwapChain, SyncInterval, Flags);
-            };
+            mutex.unlock();
+            break :blk device;
         }
 
-        break :blk device_map.getPtr(pSwapChain).?;
+        const device = graphics.d3d11.Device.init(pSwapChain) catch {
+            mutex.unlock();
+            return present(pSwapChain, SyncInterval, Flags);
+        };
+
+        device_map.put(std.heap.page_allocator, pSwapChain, device) catch {
+            mutex.unlock();
+            device.deinit();
+            return present(pSwapChain, SyncInterval, Flags);
+        };
+
+        mutex.unlock();
+        break :blk device;
     };
 
-    var gui: @import("../Gui2.zig") = .init;
-    @import("../main2.zig").render(&gui);
+    var gui: Gui = .init;
+    renderer.render(&gui);
 
-    // if errors just remove it
-    // now question is it safe to call render not wrapped inside a mutex
+    // if errors maybe we should detach d3d11
+    // rename to present
     device.render(gui.draw_verticies.slice(), gui.draw_indecies.slice(), gui.draw_commands.slice()) catch |err| {
         std.log.err("render failed: {}", .{err});
     };
@@ -231,16 +238,19 @@ fn ResizeBuffers(
     NewFormat: dxgi.DXGI_FORMAT,
     SwapChainFlags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
-    mutex.lock();
+    blk: {
+        mutex.lock();
 
-    if (device_map.fetchSwapRemove(@ptrCast(pSwapChain))) |kv| {
-        mutex.unlock();
-        kv.value.deinit();
-    } else {
+        if (device_map.fetchSwapRemove(pSwapChain)) |kv| {
+            mutex.unlock();
+            kv.value.deinit();
+            break :blk;
+        }
+
         mutex.unlock();
         return resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
     }
-
+    
     const hr = resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
 
     if (hr == windows.S_OK) {

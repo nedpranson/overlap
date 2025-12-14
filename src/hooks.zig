@@ -71,6 +71,7 @@ pub fn init() bool {
     defer mutex.unlock();
 
     if (windows.GetModuleHandle("d3d11.dll")) |mod| {
+        // TODO: Unsafe
         _ = d3d11.attach(mod);
     }
 

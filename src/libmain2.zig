@@ -2,20 +2,21 @@ const std = @import("std");
 const windows = @import("windows.zig");
 const detours = @import("detours.zig");
 const hooks = @import("hooks.zig");
+const renderer = @import("renderer.zig");
 
 // maybe return like an error.Failed or smth so cleanup would not be called
 fn setup() bool {
-    std.log.info("prepare them hooks and state...", .{});
     return hooks.init();
 }
 
 fn cleanup() void {
-    std.log.info("restore modified state...", .{});
+    renderer.cleanup();
     hooks.deinit();
 }
 
 var enabled: std.atomic.Value(bool) = .init(false);
 
+// Todo: remove mutex
 var mutex: std.Thread.Mutex = .{};
 var success = false;
 

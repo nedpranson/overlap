@@ -1,9 +1,17 @@
+const std = @import("std");
+const windows = @import("windows.zig");
 const Gui = @import("Gui2.zig");
 
 pub fn setup() !void {
+    std.log.info("hello!", .{});
+
+    try windows.RoInitialize(windows.RO_INIT_MULTITHREADED);
+    errdefer windows.RoUninitialize();
 }
 
 pub fn cleanup() void {
+    std.log.info("bye!", .{});
+    windows.RoUninitialize();
 }
 
 // now how can we make images indipendent?
