@@ -10,8 +10,8 @@ fn setup() bool {
 }
 
 fn cleanup() void {
-    renderer.cleanup();
     hooks.deinit();
+    renderer.cleanup();
 }
 
 var enabled: std.atomic.Value(bool) = .init(false);

@@ -37,7 +37,7 @@ pub fn render(gui: *Gui) void {
             .initialized => return main.render(gui),
             .initializing => atomic.spinLoopHint(),
             .failure => return,
-            .uninitialized => if (state.cmpxchgWeak(.uninitialized, .initializing, .acq_rel, .acquire) == null) {
+            .uninitialized => if (state.cmpxchgWeak(.uninitialized, .initializing, .release, .monotonic) == null) {
                 const s: State = if (@call(.always_inline, setup, .{})) .initialized else .failure;
                 state.store(s, .release);
             }
