@@ -362,8 +362,8 @@ const D3D11Backend = struct {
         for (draw_commands) |cmd| {
             const srv = blk: {
                 //if (cmd.image) |img| {
-                    //const d3d11_image: *const D3D11Image = @ptrCast(@alignCast(img.ptr));
-                    //break :blk d3d11_image.resource;
+                //const d3d11_image: *const D3D11Image = @ptrCast(@alignCast(img.ptr));
+                //break :blk d3d11_image.resource;
                 //}
 
                 break :blk self.white_pixel_resource;

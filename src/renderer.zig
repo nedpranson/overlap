@@ -40,7 +40,7 @@ pub fn render(gui: *Gui) void {
             .uninitialized => if (state.cmpxchgWeak(.uninitialized, .initializing, .release, .monotonic) == null) {
                 const s: State = if (@call(.always_inline, setup, .{})) .initialized else .failure;
                 state.store(s, .release);
-            }
+            },
         }
     }
 }

@@ -168,30 +168,30 @@ pub const ExifOrientationMode_IgnoreExifOrientation = 0;
 pub const ColorManagementMode = INT;
 pub const ColorManagementMode_DoNotColorManage = 0;
 
-pub const WS_BORDER        = 0x00800000;
-pub const WS_CAPTION       = 0x00C00000;
-pub const WS_CHILD         = 0x40000000;
-pub const WS_CHILDWINDOW   = 0x40000000;
-pub const WS_CLIPCHILDREN  = 0x02000000;
-pub const WS_CLIPSIBLINGS  = 0x04000000;
-pub const WS_DISABLED      = 0x08000000;
-pub const WS_DLGFRAME      = 0x00400000;
-pub const WS_GROUP         = 0x00020000;
-pub const WS_HSCROLL       = 0x00100000;
-pub const WS_ICONIC        = 0x20000000;
-pub const WS_MAXIMIZE      = 0x01000000;
-pub const WS_MAXIMIZEBOX   = 0x00010000;
-pub const WS_MINIMIZE      = 0x20000000;
-pub const WS_MINIMIZEBOX   = 0x00020000;
-pub const WS_OVERLAPPED    = 0x00000000;
-pub const WS_POPUP         = 0x80000000;
-pub const WS_SIZEBOX       = 0x00040000;
-pub const WS_SYSMENU       = 0x00080000;
-pub const WS_TABSTOP       = 0x00010000;
-pub const WS_THICKFRAME    = 0x00040000;
-pub const WS_TILED         = 0x00000000;
-pub const WS_VISIBLE       = 0x10000000;
-pub const WS_VSCROLL       = 0x00200000;
+pub const WS_BORDER = 0x00800000;
+pub const WS_CAPTION = 0x00C00000;
+pub const WS_CHILD = 0x40000000;
+pub const WS_CHILDWINDOW = 0x40000000;
+pub const WS_CLIPCHILDREN = 0x02000000;
+pub const WS_CLIPSIBLINGS = 0x04000000;
+pub const WS_DISABLED = 0x08000000;
+pub const WS_DLGFRAME = 0x00400000;
+pub const WS_GROUP = 0x00020000;
+pub const WS_HSCROLL = 0x00100000;
+pub const WS_ICONIC = 0x20000000;
+pub const WS_MAXIMIZE = 0x01000000;
+pub const WS_MAXIMIZEBOX = 0x00010000;
+pub const WS_MINIMIZE = 0x20000000;
+pub const WS_MINIMIZEBOX = 0x00020000;
+pub const WS_OVERLAPPED = 0x00000000;
+pub const WS_POPUP = 0x80000000;
+pub const WS_SIZEBOX = 0x00040000;
+pub const WS_SYSMENU = 0x00080000;
+pub const WS_TABSTOP = 0x00010000;
+pub const WS_THICKFRAME = 0x00040000;
+pub const WS_TILED = 0x00000000;
+pub const WS_VISIBLE = 0x10000000;
+pub const WS_VSCROLL = 0x00200000;
 
 pub const WS_OVERLAPPEDWINDOW = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
 pub const WS_POPUPWINDOW = WS_POPUP | WS_BORDER | WS_SYSMENU;
@@ -233,7 +233,7 @@ pub const WINHTTP_QUERY_CONTENT_LENGTH = 5;
 pub const WINHTTP_QUERY_STATUS_CODE = 19;
 pub const WINHTTP_QUERY_FLAG_NUMBER = 0x20000000;
 
-pub const CreateWindowExError = error {
+pub const CreateWindowExError = error{
     Unexpected,
 };
 
@@ -411,7 +411,7 @@ pub fn GetModuleInformation(hProcess: windows.HANDLE, hModule: windows.HMODULE) 
     return module_info;
 }
 
-pub const GetProcAddressError = error{ 
+pub const GetProcAddressError = error{
     ProcedureNotFound,
     Unexpected,
 };

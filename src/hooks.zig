@@ -83,7 +83,7 @@ pub fn init() bool {
 
 pub fn deinit() void {
     assert(hooked == true);
-    
+
     defer load_library_a = undefined;
     defer load_library_w = undefined;
 

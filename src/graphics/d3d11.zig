@@ -45,7 +45,6 @@ const DeviceContextState = struct {
 };
 
 pub const Device = struct {
-
     device: *d3d11.ID3D11Device,
     device_context: *d3d11.ID3D11DeviceContext,
 
@@ -343,8 +342,8 @@ pub const Device = struct {
         for (draw_commands) |cmd| {
             const srv = blk: {
                 //if (cmd.image) |img| {
-                    //const d3d11_image: *const D3D11Image = @ptrCast(@alignCast(img.ptr));
-                    //break :blk d3d11_image.resource;
+                //const d3d11_image: *const D3D11Image = @ptrCast(@alignCast(img.ptr));
+                //break :blk d3d11_image.resource;
                 //}
 
                 break :blk device.white_pixel_resource;
@@ -356,7 +355,6 @@ pub const Device = struct {
             index_off += @intCast(cmd.index_len);
         }
     }
-
 };
 
 fn storeState(context: *d3d11.ID3D11DeviceContext, state: *DeviceContextState) void {

@@ -22,6 +22,7 @@ var mutex: Thread.Mutex = .{};
 
 var device_map: std.AutoArrayHashMapUnmanaged(*dxgi.IDXGISwapChain, graphics.d3d11.Device) = .empty;
 
+var release: *@TypeOf(Release) = undefined;
 var present: *@TypeOf(Present) = undefined;
 var resize_buffers: *@TypeOf(ResizeBuffers) = undefined;
 
@@ -110,8 +111,8 @@ pub fn attach(d3d11_lib: windows.HMODULE) bool {
 
     device_map = .empty;
 
-    present = @constCast(@ptrCast(swap_chain.vtable[8]));
-    resize_buffers = @constCast(@ptrCast(swap_chain.vtable[13]));
+    present = @ptrCast(@constCast(swap_chain.vtable[8]));
+    resize_buffers = @ptrCast(@constCast(swap_chain.vtable[13]));
 
     defer if (failure) {
         present = undefined;
@@ -168,17 +169,19 @@ pub fn active() bool {
     return hooked;
 }
 
+// TODO: hook this
 fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
-    mutex.lock();
-    if (device_map.fetchSwapRemove(@ptrCast(pIUnknown))) |kv| {
-        kv.value.deinit();
+    const refs = release(pIUnknown);
+
+    if (refs == 0) {
+        mutex.lock();
+        if (device_map.fetchSwapRemove(@ptrCast(pIUnknown))) |kv| {
+            kv.value.deinit();
+        }
+        mutex.unlock();
     }
-    mutex.unlock();
-
-    //const refs = global.?.release(pIUnknown);
-    //return refs;
-
-    return 0;
+    
+    return refs;
 }
 
 // point is so we that we only pass instructions what and where to draw
@@ -250,7 +253,7 @@ fn ResizeBuffers(
         mutex.unlock();
         return resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
     }
-    
+
     const hr = resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
 
     if (hr == windows.S_OK) {

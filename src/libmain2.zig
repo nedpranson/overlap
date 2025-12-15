@@ -67,7 +67,7 @@ fn logFn(
     var buffer = [_]u8{'\x00'} ** 4096;
     const msg = std.fmt.bufPrintZ(&buffer, level_txt ++ prefix2 ++ format, args) catch blk: {
         buffer[buffer.len - 1] = '\x00';
-        break :blk buffer[0..buffer.len - 1:0];
+        break :blk buffer[0 .. buffer.len - 1 :0];
     };
 
     windows.OutputDebugString(msg);
