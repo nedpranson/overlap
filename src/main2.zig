@@ -107,7 +107,7 @@ pub fn sessionChanged(_: void, _: windows.GlobalSystemMediaTransportControlsSess
             context.session = null;
         }
 
-        context.session = try manager.GetCurrentSession();
+        context.session = (try manager.GetCurrentSession()) orelse return;
         break :blk context.session.?;
     };
 
