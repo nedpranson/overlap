@@ -43,6 +43,13 @@ pub fn rect(gui: *Gui, top: [2]f32, bot: [2]f32, col: u32) void {
     });
 }
 
+pub fn image(gui: *Gui, top: [2]f32, bot: [2]f32, src: Image) void {
+    _ = gui;
+    _ = top;
+    _ = bot;
+    _ = src;
+}
+
 const DrawCommand = struct {
     image: ?Image,
     verticies: []const shared.DrawVertex,

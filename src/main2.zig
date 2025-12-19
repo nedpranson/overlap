@@ -22,6 +22,8 @@ var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
 var manager: windows.GlobalSystemMediaTransportControlsSessionManager = undefined;
 var context: Context = .{};
 
+var token: i64 = undefined;
+
 pub fn setup() !void {
     const allocator = gpa.allocator();
 
@@ -32,7 +34,9 @@ pub fn setup() !void {
     errdefer manager.Release();
 
     try sessionChanged({}, manager);
-    _ = try manager.CurrentSessionChanged(allocator, {}, sessionChanged);
+
+    token = try manager.CurrentSessionChanged(allocator, {}, sessionChanged);
+    errdefer manager.RemoveCurrentSessionChanged(token) catch unreachable;
 }
 
 pub fn cleanup() void {
@@ -42,7 +46,9 @@ pub fn cleanup() void {
         session.Release();
     }
 
+    manager.RemoveCurrentSessionChanged(token) catch unreachable;
     manager.Release();
+
     windows.RoUninitialize();
 
     _ = gpa.deinit();
@@ -112,10 +118,45 @@ pub fn sessionChanged(_: void, _: windows.GlobalSystemMediaTransportControlsSess
     };
 
     try timelineChanged({}, session);
+    try propartiesChanged({}, session);
 
     _ = try session.TimelinePropertiesChanged(gpa.allocator(), {}, timelineChanged);
+    _ = try session.MediaPropertiesChanged(gpa.allocator(), {}, propartiesChanged);
 }
 
+pub fn propartiesChanged(_: void, session: windows.GlobalSystemMediaTransportControlsSession) !void {
+    const properties = try (try session.TryGetMediaPropertiesAsync()).getAndForget(gpa.allocator());
+    defer properties.Release();
+
+    const thumbnail = (try properties.Thumbnail()) orelse return;
+    defer thumbnail.Release();
+
+    const stream = try (try thumbnail.OpenReadAsync()).getAndForget(gpa.allocator());
+    defer stream.Release();
+
+    const decoder = try (try windows.BitmapDecoder.CreateAsync(@ptrCast(stream))).getAndForget(gpa.allocator());
+    defer decoder.Release();
+
+    const frame = try (try decoder.GetFrameAsync(0)).getAndForget(gpa.allocator());
+    defer frame.Release();
+
+    const transform = try windows.IBitmapTransform.new();
+    defer transform.Release();
+
+    transform.put_InterpolationMode(.Fant);
+
+    transform.put_ScaledHeight(64);
+    transform.put_ScaledWidth(64);
+
+    const pixels = try (try frame.GetPixelDataTransformedAsync(
+        windows.BitmapPixelFormat_Rgba8,
+        windows.BitmapAlphaMode_Premultiplied,
+        transform,
+        windows.ExifOrientationMode_IgnoreExifOrientation,
+        windows.ColorManagementMode_DoNotColorManage,
+    )).getAndForget(gpa.allocator());
+    errdefer pixels.Release();
+}
 
 pub fn timelineChanged(_: void, session: windows.GlobalSystemMediaTransportControlsSession) !void {
     const timeline = try session.GetTimelineProperties();

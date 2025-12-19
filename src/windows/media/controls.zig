@@ -317,7 +317,9 @@ pub const IGlobalSystemMediaTransportControlsSessionManager = extern struct {
         };
     }
 
-    pub const AddCurrentSessionChangedError = error{Unexpected};
+    pub const AddCurrentSessionChangedError = error{
+        Unexpected,
+    };
 
     pub fn add_CurrentSessionChanged(
         self: *IGlobalSystemMediaTransportControlsSessionManager,
@@ -336,6 +338,22 @@ pub const IGlobalSystemMediaTransportControlsSessionManager = extern struct {
         const hr = add_current_session_chnaged(self, handler, &token);
         return switch (hr) {
             windows.S_OK => token,
+            else => windows.unexpectedError(windows.HRESULT_CODE(hr)),
+        };
+    }
+
+    pub const RemoveCurrentSessionChangedError = error{
+        Unexpected,
+    };
+
+    pub fn remove_CurrentSessionChanged(self: *IGlobalSystemMediaTransportControlsSessionManager, token: EventRegistrationToken) AddCurrentSessionChangedError!void {
+        const FnType = fn (*IGlobalSystemMediaTransportControlsSessionManager, EventRegistrationToken) callconv(.winapi) HRESULT;
+
+        const remove_current_session_chnaged: *const FnType = @ptrCast(self.vtable[9]);
+        const hr = remove_current_session_chnaged(self, token);
+
+        return switch (hr) {
+            windows.S_OK => {},
             else => windows.unexpectedError(windows.HRESULT_CODE(hr)),
         };
     }

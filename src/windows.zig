@@ -1052,6 +1052,11 @@ pub const GlobalSystemMediaTransportControlsSessionManager = struct {
 
         return (try self.handle.add_CurrentSessionChanged(handler)).value;
     }
+
+    pub inline fn RemoveCurrentSessionChanged(self: GlobalSystemMediaTransportControlsSessionManager, token: i64) !void {
+        return self.handle.remove_CurrentSessionChanged(.{ .value = token });
+    }
+
 };
 
 pub const GlobalSystemMediaTransportControlsSessionPlaybackInfo = struct {
