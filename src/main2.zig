@@ -1,6 +1,7 @@
 const std = @import("std");
 const windows = @import("windows.zig");
 const Gui = @import("Gui2.zig");
+const Image = @import("graphics/Image.zig");
 
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
@@ -17,12 +18,15 @@ const Context = struct {
     } = .{},
 };
 
+// this undefined stuff sucks
 var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
 
 var manager: windows.GlobalSystemMediaTransportControlsSessionManager = undefined;
 var context: Context = .{};
 
 var token: i64 = undefined;
+
+var cover: Image = undefined;
 
 pub fn setup() !void {
     const allocator = gpa.allocator();
@@ -37,10 +41,18 @@ pub fn setup() !void {
 
     token = try manager.CurrentSessionChanged(allocator, {}, sessionChanged);
     errdefer manager.RemoveCurrentSessionChanged(token) catch unreachable;
+
+    cover = .init(.{
+        .width = 2,
+        .height = 2,
+        .data = &.{ 0x00, 0xFF, 0xFF, 0x00 },
+        .format = .r,
+    });
+    errdefer cover.deinit();
 }
 
 pub fn cleanup() void {
-    // free that id only then release
+    cover.deinit();
 
     if (context.session) |session| {
         session.Release();
