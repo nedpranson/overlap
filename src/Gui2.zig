@@ -1,6 +1,6 @@
 const bounded_array = @import("bounded_array.zig");
 const shared = @import("gui/shared.zig");
-const Image = @import("gui/Image.zig");
+const Image = @import("graphics/Image.zig");
 
 const Gui = @This();
 
@@ -24,7 +24,7 @@ pub const init: Gui = .{
 };
 
 pub fn rect(gui: *Gui, top: [2]f32, bot: [2]f32, col: u32) void {
-    const verticies = [_]shared.DrawVertex{
+    const verticies = [4]shared.DrawVertex{
         .{ .pos = .{ top[x], top[y] }, .uv = .{ 0.0, 0.0 }, .col = col },
         .{ .pos = .{ bot[x], top[y] }, .uv = .{ 1.0, 0.0 }, .col = col },
         .{ .pos = .{ bot[x], bot[y] }, .uv = .{ 1.0, 1.0 }, .col = col },
@@ -37,23 +37,36 @@ pub fn rect(gui: *Gui, top: [2]f32, bot: [2]f32, col: u32) void {
     };
 
     gui.addDrawCommand(.{
-        .image = null,
         .verticies = &verticies,
         .indecies = &indecies,
     });
 }
 
-pub fn image(gui: *Gui, top: [2]f32, bot: [2]f32, src: Image) void {
-    _ = gui;
-    _ = top;
-    _ = bot;
-    _ = src;
+pub fn image(gui: *Gui, top: [2]f32, bot: [2]f32, img: Image) void {
+    const flags: u8 = @intFromEnum(img.format);
+    const verticies = [4]shared.DrawVertex{
+        .{ .pos = .{ top[x], top[y] }, .uv = .{ 0.0, 0.0 }, .col = 0xFFFFFFFF, .flags = flags },
+        .{ .pos = .{ bot[x], top[y] }, .uv = .{ 1.0, 0.0 }, .col = 0xFFFFFFFF, .flags = flags },
+        .{ .pos = .{ bot[x], bot[y] }, .uv = .{ 1.0, 1.0 }, .col = 0xFFFFFFFF, .flags = flags },
+        .{ .pos = .{ top[x], bot[y] }, .uv = .{ 0.0, 1.0 }, .col = 0xFFFFFFFF, .flags = flags },
+    };
+
+    const indecies = [_]u16{
+        0, 1, 2,
+        0, 2, 3,
+    };
+
+    gui.addDrawCommand(.{
+        .image_id = img.id,
+        .verticies = &verticies,
+        .indecies = &indecies,
+    });
 }
 
 const DrawCommand = struct {
-    image: ?Image,
     verticies: []const shared.DrawVertex,
     indecies: []const u16,
+    image_id: u32 = 0,
 };
 
 // todo: on debug we can check if indecie are like in bounds
@@ -65,8 +78,9 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
 
     const reuse_image = blk: {
         if (self.draw_commands.len == 0) break :blk false;
+
         const last_draw_cmd = self.draw_commands.get(self.draw_commands.len - 1);
-        break :blk equalImages(last_draw_cmd.image, draw_cmd.image);
+        break :blk last_draw_cmd.image_id == draw_cmd.image_id;
     };
 
     if (reuse_image) {
@@ -90,15 +104,7 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
     }
 
     self.draw_commands.appendAssumeCapacity(.{
-        .image = draw_cmd.image,
+        .image_id = draw_cmd.image_id,
         .index_len = @intCast(draw_cmd.indecies.len),
     });
-}
-
-fn equalImages(a: ?Image, b: ?Image) bool {
-    if (a != null and b != null) {
-        return a.?.ptr == b.?.ptr;
-    }
-
-    return a == null and b == null;
 }

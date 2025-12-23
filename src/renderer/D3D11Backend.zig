@@ -365,10 +365,11 @@ const D3D11Backend = struct {
                 //const d3d11_image: *const D3D11Image = @ptrCast(@alignCast(img.ptr));
                 //break :blk d3d11_image.resource;
                 //}
-
                 break :blk self.white_pixel_resource;
             };
 
+            // TODO: use that Base Vertex Location
+            // only call PSSetShaderResources when resource changes
             self.device_context.PSSetShaderResources(0, (&srv)[0..1]);
             self.device_context.DrawIndexed(@intCast(cmd.index_len), index_off, 0);
 

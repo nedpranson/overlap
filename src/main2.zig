@@ -90,11 +90,14 @@ pub fn render(gui: *Gui) void {
     gui.rect(.{ -1.0 + pos[x], -1.0 + pos[y] }, .{ pos[x] + image_size + padding + width + padding + 1.0, pos[y] + image_size + 1.0 }, 0x202E36FF);
     gui.rect(.{ pos[x], pos[y] }, .{ pos[x] + image_size + padding + width + padding, pos[y] + image_size }, 0x10191EFF);
 
+    // cover
+    gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0}, cover);
+
     const progress = blk: {
         context.mutex.lock();
         defer context.mutex.unlock();
 
-        // !!!
+        // TODO: capture them errors !!!
         const playback_info = session.GetPlaybackInfo() catch unreachable;
         defer playback_info.Release();
 

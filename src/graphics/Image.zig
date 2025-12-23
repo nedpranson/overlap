@@ -46,7 +46,8 @@ pub fn deinit(img: Image) void {
 
 fn generate_id() u32 {
     const static = struct {
-        var id: atomic.Value(u32) = .init(0);
+        // set to one as zero is 1x1 white image pixel id (default)
+        var id: atomic.Value(u32) = .init(1);
     };
 
     return static.id.fetchAdd(1, .monotonic);
