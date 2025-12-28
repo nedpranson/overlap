@@ -19,6 +19,8 @@ pub fn buildLibrary(b: *std.Build, options: anytype) *std.Build.Step.Compile {
         .optimize = optimize,
     });
 
+    // if compiling with msvc we need to link with libc not libcpp
+    // some zig bug
     lib.linkLibCpp();
 
     lib.addIncludePath(detours.path("src"));

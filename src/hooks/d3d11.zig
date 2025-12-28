@@ -20,7 +20,9 @@ pub const interface: hooks.Hook = .{
 
 var mutex: Thread.Mutex = .{};
 
+// There should be a way to make these lock free
 var device_map: std.AutoArrayHashMapUnmanaged(*dxgi.IDXGISwapChain, graphics.d3d11.Device) = .empty;
+var image_map: std.AutoArrayHashMapUnmanaged(u32, struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView }) = .empty;
 
 var release: *@TypeOf(Release) = undefined;
 var present: *@TypeOf(Present) = undefined;
@@ -180,7 +182,7 @@ fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
         }
         mutex.unlock();
     }
-    
+
     return refs;
 }
 
@@ -222,6 +224,12 @@ fn Present(
     };
 
     var gui: Gui = .init;
+
+    // init gui with
+    // pointers to verts, indexes, dcmds
+    // and pointer too, validateImage (where, we will make new image or update it)
+    // and we would need to know when image is destroyed
+
     renderer.render(&gui);
 
     // if errors maybe we should detach d3d11

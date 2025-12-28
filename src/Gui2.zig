@@ -12,10 +12,20 @@ const DrawCommands = bounded_array.BoundedArray(shared.DrawCommand, shared.max_d
 const DrawVerticies = bounded_array.BoundedArray(shared.DrawVertex, shared.max_verticies);
 const DrawIndecies = bounded_array.BoundedArray(shared.DrawIndex, shared.max_indicies);
 
+const white_pixel: Image = .{
+    .width = 1,
+    .height = 1,
+    .data = &.{0xFF},
+    .format = .r,
+    .id = 0,
+};
+
 draw_commands: DrawCommands,
 
 draw_verticies: DrawVerticies,
 draw_indecies: DrawIndecies,
+
+// validate_image: fn (img: Image) void,
 
 pub const init: Gui = .{
     .draw_commands = .{},
@@ -57,7 +67,7 @@ pub fn image(gui: *Gui, top: [2]f32, bot: [2]f32, img: Image) void {
     };
 
     gui.addDrawCommand(.{
-        .image_id = img.id,
+        .image = img,
         .verticies = &verticies,
         .indecies = &indecies,
     });
@@ -66,7 +76,7 @@ pub fn image(gui: *Gui, top: [2]f32, bot: [2]f32, img: Image) void {
 const DrawCommand = struct {
     verticies: []const shared.DrawVertex,
     indecies: []const u16,
-    image_id: u32 = 0,
+    image: Image = white_pixel,
 };
 
 // todo: on debug we can check if indecie are like in bounds
@@ -80,19 +90,19 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
         if (self.draw_commands.len == 0) break :blk false;
 
         const last_draw_cmd = self.draw_commands.get(self.draw_commands.len - 1);
-        break :blk last_draw_cmd.image_id == draw_cmd.image_id;
+        break :blk last_draw_cmd.image_id == draw_cmd.image.id;
     };
 
     if (reuse_image) {
         self.draw_commands.ensureUnusedCapacity(1) catch return;
+    } else {
+        // self.validate_image(draw_cmd.image);
     }
 
     self.draw_verticies.appendSliceAssumeCapacity(draw_cmd.verticies);
 
     for (draw_cmd.indecies) |idx| {
-        // todo: add simd
-        // appendSlice
-        // and then in simd add do it amt
+        // todo: update base idx at render call
         self.draw_indecies.appendAssumeCapacity(amt + idx);
     }
 
@@ -104,7 +114,7 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
     }
 
     self.draw_commands.appendAssumeCapacity(.{
-        .image_id = draw_cmd.image_id,
+        .image_id = draw_cmd.image.id,
         .index_len = @intCast(draw_cmd.indecies.len),
     });
 }

@@ -1,4 +1,7 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
+const target = builtin.target;
 const windows = std.os.windows;
 const unicode = std.unicode;
 const assert = std.debug.assert;
@@ -134,12 +137,9 @@ pub const WM_LBUTTONUP = 0x0202;
 pub const WM_RBUTTONDOWN = 0x0204;
 pub const WM_RBUTTONUP = 0x0205;
 
-pub const HSTRING_HEADER = extern struct {
-    Reserved: [
-        @sizeOf(@cImport({
-            @cInclude("hstring.h");
-        }).HSTRING_HEADER)
-    ]u8,
+pub const HSTRING_HEADER = extern union {
+    Reserved1: PVOID,
+    Reserved2: [if (target.ptrBitWidth() == 64) 24 else 20]u8,
 };
 
 pub const WNDPROC = *const fn (
@@ -1056,7 +1056,6 @@ pub const GlobalSystemMediaTransportControlsSessionManager = struct {
     pub inline fn RemoveCurrentSessionChanged(self: GlobalSystemMediaTransportControlsSessionManager, token: i64) !void {
         return self.handle.remove_CurrentSessionChanged(.{ .value = token });
     }
-
 };
 
 pub const GlobalSystemMediaTransportControlsSessionPlaybackInfo = struct {

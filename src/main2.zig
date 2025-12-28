@@ -91,7 +91,7 @@ pub fn render(gui: *Gui) void {
     gui.rect(.{ pos[x], pos[y] }, .{ pos[x] + image_size + padding + width + padding, pos[y] + image_size }, 0x10191EFF);
 
     // cover
-    gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0}, cover);
+    gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, cover);
 
     const progress = blk: {
         context.mutex.lock();
