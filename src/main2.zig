@@ -116,10 +116,10 @@ pub fn render(gui: *Gui) void {
     const fraction = bar_width - @floor(bar_width);
 
     // progress bar
-    gui.rect(.{ -1.0 + pos[x], pos[y] + image_size }, .{ -1.0 + pos[x] + bar_width, pos[y] + image_size + 1.0 }, 0x00DFA2FF);
+    gui.rect(.{ -1.0 + pos[x], pos[y] + image_size }, .{ -1.0 + pos[x] + @floor(bar_width), pos[y] + image_size + 1.0 }, 0x00DFA2FF);
     if (fraction > 0.0) {
         const col = 0x00DFA200 + @as(u32, @intFromFloat(fraction * 255.0));
-        gui.rect(.{ -1.0 + pos[x] + bar_width, pos[y] + image_size }, .{ -1.0 + pos[x] + bar_width + 1.0, pos[y] + image_size + 1.0 }, col);
+        gui.rect(.{ -1.0 + pos[x] + @floor(bar_width), pos[y] + image_size }, .{ -1.0 + pos[x] + @floor(bar_width) + 1.0, pos[y] + image_size + 1.0 }, col);
     }
 
 }
