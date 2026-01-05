@@ -113,9 +113,15 @@ pub fn render(gui: *Gui) void {
 
     const bar_max_width = image_size + padding + width + padding + 2.0;
     const bar_width = @min(@as(f32, @floatFromInt(progress)) / @as(f32, @floatFromInt(context.timeline.end_time)), 1.0) * bar_max_width;
+    const fraction = bar_width - @floor(bar_width);
 
     // progress bar
     gui.rect(.{ -1.0 + pos[x], pos[y] + image_size }, .{ -1.0 + pos[x] + bar_width, pos[y] + image_size + 1.0 }, 0x00DFA2FF);
+    if (fraction > 0.0) {
+        const col = 0x00DFA200 + @as(u32, @intFromFloat(fraction * 255.0));
+        gui.rect(.{ -1.0 + pos[x] + bar_width, pos[y] + image_size }, .{ -1.0 + pos[x] + bar_width + 1.0, pos[y] + image_size + 1.0 }, col);
+    }
+
 }
 
 pub fn sessionChanged(_: void, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
