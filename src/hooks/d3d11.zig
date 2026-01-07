@@ -5,6 +5,7 @@ const hooks = @import("../hooks.zig");
 const graphics = @import("../graphics.zig");
 const Gui = @import("../Gui2.zig");
 const renderer = @import("../renderer.zig");
+const shared = @import("../gui/shared.zig");
 
 const d3d11 = windows.d3d11;
 const dxgi = windows.dxgi;
@@ -193,6 +194,10 @@ fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
 // key as ptr to Image
 // and we can add an event like make/destroy image and do some stuff based on it idk
 
+threadlocal var draw_commands: [shared.max_draw_commands]shared.DrawCommand = undefined;
+threadlocal var draw_verticies: [shared.max_verticies]shared.DrawVertex = undefined;
+threadlocal var draw_indicies: [shared.max_indicies]shared.DrawIndex = undefined;
+
 fn Present(
     pSwapChain: *dxgi.IDXGISwapChain,
     SyncInterval: windows.UINT,
@@ -223,18 +228,17 @@ fn Present(
         break :blk device;
     };
 
-    var gui: Gui = .init;
 
     // init gui with
     // pointers to verts, indexes, dcmds
     // and pointer too, validateImage (where, we will make new image or update it)
     // and we would need to know when image is destroyed
-
+    var gui: Gui = .init(&draw_commands, &draw_verticies, &draw_indicies);
     renderer.render(&gui);
 
     // if errors maybe we should detach d3d11
     // rename to present
-    device.render(gui.draw_verticies.slice(), gui.draw_indecies.slice(), gui.draw_commands.slice()) catch |err| {
+    device.render(gui.draw_verticies.items, gui.draw_indecies.items, gui.draw_commands.items) catch |err| {
         std.log.err("render failed: {}", .{err});
     };
 
