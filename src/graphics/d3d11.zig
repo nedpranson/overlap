@@ -2,6 +2,7 @@ const std = @import("std");
 const windows = @import("../windows.zig");
 const shared = @import("../gui/shared.zig");
 const graphics = @import("../graphics.zig");
+const Image = @import("../graphics/Image.zig");
 
 const mem = std.mem;
 const dxgi = windows.dxgi;
@@ -64,8 +65,10 @@ pub const Device = struct {
 
     sampler: *d3d11.ID3D11SamplerState,
 
-    white_pixel_texture: *d3d11.ID3D11Texture2D,
-    white_pixel_resource: *d3d11.ID3D11ShaderResourceView,
+    //white_pixel_texture: *d3d11.ID3D11Texture2D,
+    //white_pixel_resource: *d3d11.ID3D11ShaderResourceView,
+
+    //image_map: std.AutoHashMapUnmanaged(u32, struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView }) = .empty,
 
     pub const Error = error{
         OutOfMemory,
@@ -101,8 +104,8 @@ pub const Device = struct {
             .vertex_buffer = undefined,
             .index_buffer = undefined,
             .sampler = undefined,
-            .white_pixel_texture = undefined,
-            .white_pixel_resource = undefined,
+            //.white_pixel_texture = undefined,
+            //.white_pixel_resource = undefined,
         };
 
         try swap_chain.GetBuffer(0, d3d11.ID3D11Texture2D.UUID, @ptrCast(&back_buffer));
@@ -229,11 +232,11 @@ pub const Device = struct {
         initial_data.pSysMem = &[1]u8{0xFF};
         initial_data.SysMemPitch = 1;
 
-        try device.CreateTexture2D(&texture_desc, &initial_data, &result.white_pixel_texture);
-        errdefer result.white_pixel_texture.Release();
+        //try device.CreateTexture2D(&texture_desc, &initial_data, &result.white_pixel_texture);
+        //errdefer result.white_pixel_texture.Release();
 
-        try device.CreateShaderResourceView(@ptrCast(result.white_pixel_texture), null, &result.white_pixel_resource);
-        errdefer result.white_pixel_resource.Release();
+        //try device.CreateShaderResourceView(@ptrCast(result.white_pixel_texture), null, &result.white_pixel_resource);
+        //errdefer result.white_pixel_resource.Release();
 
         var sampler_desc = mem.zeroes(d3d11.D3D11_SAMPLER_DESC);
         sampler_desc.Filter = d3d11.D3D11_FILTER_MIN_MAG_MIP_LINEAR;
@@ -252,8 +255,8 @@ pub const Device = struct {
     }
 
     pub fn deinit(device: *const Device) void {
-        device.white_pixel_resource.Release();
-        device.white_pixel_texture.Release();
+        //device.white_pixel_resource.Release();
+        //device.white_pixel_texture.Release();
 
         device.sampler.Release();
 
@@ -340,21 +343,20 @@ pub const Device = struct {
 
         var index_off: windows.UINT = 0;
         for (draw_commands) |cmd| {
-            const srv = blk: {
-                //if (cmd.image) |img| {
-                //const d3d11_image: *const D3D11Image = @ptrCast(@alignCast(img.ptr));
-                //break :blk d3d11_image.resource;
-                //}
-
-                break :blk device.white_pixel_resource;
-            };
+            const srv: *d3d11.ID3D11ShaderResourceView = @ptrCast(@alignCast(cmd.srv));
 
             device.device_context.PSSetShaderResources(0, (&srv)[0..1]);
-            device.device_context.DrawIndexed(@intCast(cmd.index_len), index_off, 0);
+            device.device_context.DrawIndexed(@intCast(cmd.index_len), index_off, 0); // todo: use third argument
 
             index_off += @intCast(cmd.index_len);
         }
     }
+
+    pub fn loadImage(device: *const Device, img: Image) struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView } {
+        _ = device;
+        _ = img;
+    }
+
 };
 
 fn storeState(context: *d3d11.ID3D11DeviceContext, state: *DeviceContextState) void {

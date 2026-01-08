@@ -71,7 +71,7 @@ pub fn image(gui: *Gui, top: [2]f32, bot: [2]f32, img: Image) void {
 const DrawCommand = struct {
     verticies: []const shared.DrawVertex,
     indecies: []const u16,
-    image: Image = white_pixel,
+    image: *anyopaque,
 };
 
 // todo: on debug we can check if indecie are like in bounds
@@ -86,7 +86,7 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
 
     const reuse_image = blk: {
         const last_draw_cmd = self.draw_commands.getLastOrNull() orelse break :blk false;
-        break :blk last_draw_cmd.image_id == draw_cmd.image.id;
+        break :blk last_draw_cmd.srv == draw_cmd.image;
     };
 
     if (!reuse_image) {

@@ -8,7 +8,7 @@ pub const max_indicies = max_draw_commands * 6;
 pub const DrawIndex = u16;
 
 pub const DrawCommand = struct {
-    image_id: u32,
+    srv: *anyopaque,
     index_len: DrawIndex,
 };
 

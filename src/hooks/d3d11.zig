@@ -6,6 +6,7 @@ const graphics = @import("../graphics.zig");
 const Gui = @import("../Gui2.zig");
 const renderer = @import("../renderer.zig");
 const shared = @import("../gui/shared.zig");
+const Image = @import("../graphics/Image.zig");
 
 const d3d11 = windows.d3d11;
 const dxgi = windows.dxgi;
@@ -22,8 +23,8 @@ pub const interface: hooks.Hook = .{
 var mutex: Thread.Mutex = .{};
 
 // There should be a way to make these lock free
+// perhaps thread local
 var device_map: std.AutoArrayHashMapUnmanaged(*dxgi.IDXGISwapChain, graphics.d3d11.Device) = .empty;
-var image_map: std.AutoArrayHashMapUnmanaged(u32, struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView }) = .empty;
 
 var release: *@TypeOf(Release) = undefined;
 var present: *@TypeOf(Present) = undefined;
@@ -198,6 +199,18 @@ threadlocal var draw_commands: [shared.max_draw_commands]shared.DrawCommand = un
 threadlocal var draw_verticies: [shared.max_verticies]shared.DrawVertex = undefined;
 threadlocal var draw_indicies: [shared.max_indicies]shared.DrawIndex = undefined;
 
+var image_map: std.AutoArrayHashMapUnmanaged(u32, struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView }) = .empty;
+
+fn requestSRV(device: graphics.d3d11.Device, img: Image) *anyopaque {
+    // todo: make threadsafe
+    const res = image_map.getOrPut(std.heap.page_allocator, img.id) catch unreachable;
+    if (!res.found_existing) {
+        res.value_ptr = device.loadImage(img);
+    }
+
+    return res.value_ptr.@"1";
+}
+
 fn Present(
     pSwapChain: *dxgi.IDXGISwapChain,
     SyncInterval: windows.UINT,
@@ -228,12 +241,11 @@ fn Present(
         break :blk device;
     };
 
-
-    // init gui with
-    // pointers to verts, indexes, dcmds
-    // and pointer too, validateImage (where, we will make new image or update it)
-    // and we would need to know when image is destroyed
-    var gui: Gui = .init(&draw_commands, &draw_verticies, &draw_indicies);
+    var gui: Gui = .init(
+        &draw_commands,
+        &draw_verticies,
+        &draw_indicies,
+    );
     renderer.render(&gui);
 
     // if errors maybe we should detach d3d11
@@ -241,6 +253,7 @@ fn Present(
     device.render(gui.draw_verticies.items, gui.draw_indecies.items, gui.draw_commands.items) catch |err| {
         std.log.err("render failed: {}", .{err});
     };
+
 
     return present(pSwapChain, SyncInterval, Flags);
 }
