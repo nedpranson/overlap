@@ -353,8 +353,68 @@ pub const Device = struct {
     }
 
     pub fn loadImage(device: *const Device, img: Image) struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView } {
-        _ = device;
-        _ = img;
+        var tex: *d3d11.ID3D11Texture2D = undefined;
+        var srv: *d3d11.ID3D11ShaderResourceView = undefined;
+
+        const format: windows.INT = switch (img.format) {
+            .r => dxgi.DXGI_FORMAT_R8_UNORM,
+            .rgba => dxgi.DXGI_FORMAT_R8G8B8A8_UNORM,
+        };
+
+        const usage: windows.INT = d3d11.D3D11_USAGE_DEFAULT;
+        //const usage: windows.INT = switch (img.usage) {
+            //.static => d3d11.D3D11_USAGE_DEFAULT,
+            //.dynamic => d3d11.D3D11_USAGE_DYNAMIC,
+        //};
+
+        const cpu_flags: windows.UINT = 0;
+        //const cpu_flags: windows.UINT = switch (img.usage) {
+            //.static => 0,
+            //.dynamic => d3d11.D3D11_CPU_ACCESS_WRITE,
+        //};
+
+        var texture_desc = mem.zeroes(d3d11.D3D11_TEXTURE2D_DESC);
+        texture_desc.Width = img.width;
+        texture_desc.Height = img.height;
+        texture_desc.MipLevels = 1;
+        texture_desc.ArraySize = 1;
+        texture_desc.Format = format;
+        texture_desc.SampleDesc.Count = 1;
+        texture_desc.Usage = usage;
+        texture_desc.BindFlags = d3d11.D3D11_BIND_SHADER_RESOURCE;
+        texture_desc.CPUAccessFlags = cpu_flags;
+
+        //switch (img.usage) {
+            //.static => {
+                var initial_data = mem.zeroes(d3d11.D3D11_SUBRESOURCE_DATA);
+                initial_data.pSysMem = img.data;
+                initial_data.SysMemPitch = img.width * @intFromEnum(img.format);
+
+                // todo: handle err
+                device.device.CreateTexture2D(&texture_desc, &initial_data, &tex) catch unreachable;
+                errdefer tex.Release();
+            //},
+            //.dynamic => {
+                //try device.CreateTexture2D(&texture_desc, null, &tex.texture);
+                //errdefer tex.Release();
+
+                //var mapped_resource: d3d11.D3D11_MAPPED_SUBRESOURCE = undefined;
+
+                //// todo: handle err
+                //device.device_context.Map(@ptrCast(tex), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource) catch unreachable;
+                //defer device.device_context.Unmap(@ptrCast(tex), 0);
+
+                //mapped_resource.write(u8, img.data, img.width * @intFromEnum(img.format));
+            //},
+        //}
+
+        //errdefer tex.Release();
+
+        // todo: handle
+        device.device.CreateShaderResourceView(@ptrCast(tex), null, &srv) catch unreachable;
+        errdefer srv.Release();
+
+        return .{ tex, srv };
     }
 
 };

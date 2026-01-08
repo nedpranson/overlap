@@ -201,11 +201,14 @@ threadlocal var draw_indicies: [shared.max_indicies]shared.DrawIndex = undefined
 
 var image_map: std.AutoArrayHashMapUnmanaged(u32, struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView }) = .empty;
 
-fn requestSRV(device: graphics.d3d11.Device, img: Image) *anyopaque {
-    // todo: make threadsafe
+fn requestSRV(ctx: *anyopaque, img: Image) *anyopaque {
+    const device: *graphics.d3d11.Device = @ptrCast(@alignCast(ctx));
+    // todo: handle err
+    // todo: unsafe for multi threading!!!
     const res = image_map.getOrPut(std.heap.page_allocator, img.id) catch unreachable;
     if (!res.found_existing) {
-        res.value_ptr = device.loadImage(img);
+        @branchHint(.unlikely);
+        res.value_ptr.* = device.loadImage(img);
     }
 
     return res.value_ptr.@"1";
@@ -245,6 +248,8 @@ fn Present(
         &draw_commands,
         &draw_verticies,
         &draw_indicies,
+        @constCast(&device),
+        &requestSRV,
     );
     renderer.render(&gui);
 
@@ -271,6 +276,7 @@ fn ResizeBuffers(
 
         if (device_map.fetchSwapRemove(pSwapChain)) |kv| {
             mutex.unlock();
+            // todo: deinit img_map
             kv.value.deinit();
             break :blk;
         }

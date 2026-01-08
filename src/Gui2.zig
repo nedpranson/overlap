@@ -20,11 +20,22 @@ draw_commands: std.ArrayList(shared.DrawCommand),
 draw_verticies: std.ArrayList(shared.DrawVertex),
 draw_indecies: std.ArrayList(shared.DrawIndex),
 
-pub fn init(draw_commands: []shared.DrawCommand, draw_verticies: []shared.DrawVertex, draw_indecies: []shared.DrawIndex) Gui {
+ctx: *anyopaque,
+request_srv: *const fn(ctx: *anyopaque, img: Image) *anyopaque,
+
+pub fn init(
+    draw_commands: []shared.DrawCommand,
+    draw_verticies: []shared.DrawVertex,
+    draw_indecies: []shared.DrawIndex,
+    ctx: *anyopaque,
+    request_srv: *const fn(ctx: *anyopaque, img: Image) *anyopaque,
+) Gui {
     return .{
         .draw_commands = .initBuffer(draw_commands),
         .draw_verticies = .initBuffer(draw_verticies),
         .draw_indecies = .initBuffer(draw_indecies),
+        .ctx = ctx,
+        .request_srv = request_srv,
     };
 }
 
@@ -44,6 +55,7 @@ pub fn rect(gui: *Gui, top: [2]f32, bot: [2]f32, col: u32) void {
     gui.addDrawCommand(.{
         .verticies = &verticies,
         .indecies = &indecies,
+        .image = gui.request_srv(gui.ctx, white_pixel),
     });
 }
 
@@ -62,9 +74,9 @@ pub fn image(gui: *Gui, top: [2]f32, bot: [2]f32, img: Image) void {
     };
 
     gui.addDrawCommand(.{
-        .image = img,
         .verticies = &verticies,
         .indecies = &indecies,
+        .image = gui.request_srv(gui.ctx, img),
     });
 }
 
@@ -109,7 +121,7 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
     }
 
     self.draw_commands.appendAssumeCapacity(.{
-        .image_id = draw_cmd.image.id,
+        .srv = draw_cmd.image,
         .index_len = @intCast(draw_cmd.indecies.len),
     });
 }
