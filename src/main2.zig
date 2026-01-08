@@ -3,6 +3,8 @@ const windows = @import("windows.zig");
 const Gui = @import("Gui2.zig");
 const Image = @import("graphics/Image.zig");
 
+const unicode = std.unicode;
+const mem = std.mem;
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
 
@@ -10,6 +12,7 @@ const Context = struct {
     mutex: Thread.Mutex = .{},
 
     session: ?windows.GlobalSystemMediaTransportControlsSession = null,
+    cover: ?Image = null,
 
     timeline: struct {
         last_updated: i64 = 0,
@@ -26,8 +29,6 @@ var context: Context = .{};
 
 var token: i64 = undefined;
 
-var cover: Image = undefined;
-
 pub fn setup() !void {
     const allocator = gpa.allocator();
 
@@ -41,19 +42,10 @@ pub fn setup() !void {
 
     token = try manager.CurrentSessionChanged(allocator, {}, sessionChanged);
     errdefer manager.RemoveCurrentSessionChanged(token) catch unreachable;
-
-    cover = .init(.{
-        .width = 2,
-        .height = 2,
-        .data = &.{ 0x00, 0xFF, 0xFF, 0x00 },
-        .format = .r,
-    });
-    errdefer cover.deinit();
 }
 
 pub fn cleanup() void {
-    cover.deinit();
-
+    // todo: release context cover img
     if (context.session) |session| {
         session.Release();
     }
@@ -90,8 +82,14 @@ pub fn render(gui: *Gui) void {
     gui.rect(.{ -1.0 + pos[x], -1.0 + pos[y] }, .{ pos[x] + image_size + padding + width + padding + 1.0, pos[y] + image_size + 1.0 }, 0x202E36FF);
     gui.rect(.{ pos[x], pos[y] }, .{ pos[x] + image_size + padding + width + padding, pos[y] + image_size }, 0x10191EFF);
 
+
+    context.mutex.lock();
+    if (context.cover) |cov| {
+        gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, cov);
+    }
+    context.mutex.unlock();
+
     // cover
-    gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, cover);
 
     const progress = blk: {
         context.mutex.lock();
@@ -167,8 +165,30 @@ pub fn propartiesChanged(_: void, session: windows.GlobalSystemMediaTransportCon
 
     transform.put_InterpolationMode(.Fant);
 
-    transform.put_ScaledHeight(64);
-    transform.put_ScaledWidth(64);
+    const spotify_packaged_id = unicode.utf8ToUtf16LeStringLiteral("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify");
+    const spotify_unpackaged_id = unicode.utf8ToUtf16LeStringLiteral("Spotify.exe");
+
+    const model_id = try session.SourceAppUserModelId();
+
+    // Crops out Spotifies branding from original thumbnail's image.
+    if (mem.eql(u16, model_id, spotify_packaged_id) or mem.eql(u16, model_id, spotify_unpackaged_id)) {
+        // Perhaps this solution does not look so great, but I think it is the best option.
+
+        transform.put_ScaledHeight(@intFromFloat(64.0 * 1.2821));
+        transform.put_ScaledWidth(@intFromFloat(64.0 * 1.2821));
+
+        transform.put_Bounds(.{
+            .X = @intFromFloat(0.11 * 1.2821 * 64.0),
+            .Y = 0,
+            .Width = 64,
+            .Height = 64,
+        });
+    } else {
+        transform.put_ScaledHeight(64);
+        transform.put_ScaledWidth(64);
+    }
+
+    // todo: handle like non square ones
 
     const pixels = try (try frame.GetPixelDataTransformedAsync(
         windows.BitmapPixelFormat_Rgba8,
@@ -178,6 +198,27 @@ pub fn propartiesChanged(_: void, session: windows.GlobalSystemMediaTransportCon
         windows.ColorManagementMode_DoNotColorManage,
     )).getAndForget(gpa.allocator());
     errdefer pixels.Release();
+
+    context.mutex.lock();
+    defer context.mutex.unlock();
+
+    if (context.cover) |_| {
+        return;
+    }
+    // todo: release pixels
+
+
+    var ptr: [*]const u8 = undefined;
+    var len: u32 = undefined;
+    // this data needs to survive till we call gui.image()
+    pixels.DetachPixelData(&len, &ptr); // todo: add PixelDataProvider
+
+    context.cover = .init(.{
+        .width = 64,
+        .height = 64,
+        .data = ptr[0..len],
+        .format = .rgba,
+    });
 }
 
 pub fn timelineChanged(_: void, session: windows.GlobalSystemMediaTransportControlsSession) !void {
