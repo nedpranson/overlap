@@ -16,8 +16,9 @@ const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
 
 pub const interface: hooks.Hook = .{
-    .attach = attach,
-    .detach = detach,
+    .attach = &attach,
+    .detach = &detach,
+    .uload_image = &unloadImage,
 };
 
 var mutex: Thread.Mutex = .{};
@@ -167,6 +168,14 @@ pub fn detach() void {
         device.deinit();
     }
     device_map.deinit(std.heap.page_allocator);
+}
+
+pub fn unloadImage(id: u32) void {
+    if (image_map.fetchSwapRemove(id)) |kv| {
+        kv.value.@"0".Release();
+        kv.value.@"1".Release();
+        std.debug.print("removed srv!\n", .{});
+    }
 }
 
 pub fn active() bool {

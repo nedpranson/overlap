@@ -1,4 +1,5 @@
 const std = @import("std");
+const hooks = @import("../hooks.zig");
 
 const assert = std.debug.assert;
 const atomic = std.atomic;
@@ -40,8 +41,9 @@ pub fn init(desc: Desc) Image {
 }
 
 pub fn deinit(img: Image) void {
-    _ = img;
-    // broadcast that image with id was destroyed
+    for (hooks.hooks) |hook| {
+        hook.uload_image(img.id);
+    }
 }
 
 fn generate_id() u32 {

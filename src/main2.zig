@@ -12,7 +12,11 @@ const Context = struct {
     mutex: Thread.Mutex = .{},
 
     session: ?windows.GlobalSystemMediaTransportControlsSession = null,
-    cover: ?Image = null,
+
+    cover: ?struct {
+        img: Image,
+        pixels: *windows.IPixelDataProvider,
+    } = null,
 
     timeline: struct {
         last_updated: i64 = 0,
@@ -85,7 +89,7 @@ pub fn render(gui: *Gui) void {
 
     context.mutex.lock();
     if (context.cover) |cov| {
-        gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, cov);
+        gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, cov.img);
     }
     context.mutex.unlock();
 
@@ -202,23 +206,24 @@ pub fn propartiesChanged(_: void, session: windows.GlobalSystemMediaTransportCon
     context.mutex.lock();
     defer context.mutex.unlock();
 
-    if (context.cover) |_| {
-        return;
+    if (context.cover) |cov| {
+        cov.img.deinit();
+        cov.pixels.Release();
     }
-    // todo: release pixels
-
 
     var ptr: [*]const u8 = undefined;
     var len: u32 = undefined;
-    // this data needs to survive till we call gui.image()
     pixels.DetachPixelData(&len, &ptr); // todo: add PixelDataProvider
 
-    context.cover = .init(.{
-        .width = 64,
-        .height = 64,
-        .data = ptr[0..len],
-        .format = .rgba,
-    });
+    context.cover = .{
+        .img = .init(.{
+            .width = 64,
+            .height = 64,
+            .data = ptr[0..len],
+            .format = .rgba,
+        }),
+        .pixels = pixels,
+    };
 }
 
 pub fn timelineChanged(_: void, session: windows.GlobalSystemMediaTransportControlsSession) !void {

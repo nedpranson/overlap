@@ -2,8 +2,9 @@ const std = @import("std");
 const windows = @import("windows.zig");
 const graphics = @import("graphics.zig");
 const d3d11 = @import("hooks/d3d11.zig");
-const Gui = @import("Gui2.zig");
 const detours = @import("detours.zig");
+const Gui = @import("Gui2.zig");
+const Image = @import("graphics/Image.zig");
 
 const mem = std.mem;
 const unicode = std.unicode;
@@ -17,9 +18,12 @@ var load_library_w: *@TypeOf(LoadLibraryW) = undefined;
 
 var hooked = false;
 
+pub const hooks = [_]Hook{d3d11.interface};
+
 pub const Hook = struct {
-    attach: fn (lib: windows.HMODULE) bool,
-    detach: fn () void,
+    attach: *const fn (lib: windows.HMODULE) bool,
+    detach: *const fn () void,
+    uload_image: *const fn (id: u32) void,
 };
 
 pub fn init() bool {
