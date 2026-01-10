@@ -12,12 +12,18 @@ pub const Format = enum(u4) {
     rgba = 4,
 };
 
+pub const Usage = enum(u4) {
+    static,
+    dynamic,
+};
+
 width: u32,
 height: u32,
 
 data: [*]const u8,
 
 id: u32,
+modified: u16 = 0,
 
 format: Format,
 
@@ -26,6 +32,7 @@ pub const Desc = struct {
     height: u32,
     data: []const u8,
     format: Format,
+    usage: Usage = .static,
 };
 
 pub fn init(desc: Desc) Image {
@@ -37,6 +44,7 @@ pub fn init(desc: Desc) Image {
         .data = desc.data.ptr,
         .format = desc.format,
         .id = generate_id(),
+        .modified = if (desc.usage == .dynamic) 1 else 0, // 0 suppose to mean that this image will never be modified
     };
 }
 
@@ -44,6 +52,15 @@ pub fn deinit(img: Image) void {
     for (hooks.hooks) |hook| {
         hook.uload_image(img.id);
     }
+}
+
+pub fn update(img: *Image, data: []const u8) void {
+    assert(math.mulWide(u32, img.width, img.height) * @intFromEnum(img.format) == data.len);
+    assert(img.modified > 0);
+
+    // todo: no thread safety here!!!!
+    img.data = data.ptr;
+    img.modified +%= 1;
 }
 
 fn generate_id() u32 {

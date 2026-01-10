@@ -172,9 +172,8 @@ pub fn detach() void {
 
 pub fn unloadImage(id: u32) void {
     if (image_map.fetchSwapRemove(id)) |kv| {
-        kv.value.@"0".Release();
-        kv.value.@"1".Release();
-        std.debug.print("removed srv!\n", .{});
+        kv.value.tex.Release();
+        kv.value.srv.Release();
     }
 }
 
@@ -208,7 +207,13 @@ threadlocal var draw_commands: [shared.max_draw_commands]shared.DrawCommand = un
 threadlocal var draw_verticies: [shared.max_verticies]shared.DrawVertex = undefined;
 threadlocal var draw_indicies: [shared.max_indicies]shared.DrawIndex = undefined;
 
-var image_map: std.AutoArrayHashMapUnmanaged(u32, struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView }) = .empty;
+const ImageCache = struct {
+    tex: *d3d11.ID3D11Texture2D,
+    srv: *d3d11.ID3D11ShaderResourceView,
+    modified: u16,
+};
+
+var image_map: std.AutoArrayHashMapUnmanaged(u32, ImageCache) = .empty;
 
 fn requestSRV(ctx: *anyopaque, img: Image) *anyopaque {
     const device: *graphics.d3d11.Device = @ptrCast(@alignCast(ctx));
@@ -217,10 +222,20 @@ fn requestSRV(ctx: *anyopaque, img: Image) *anyopaque {
     const res = image_map.getOrPut(std.heap.page_allocator, img.id) catch unreachable;
     if (!res.found_existing) {
         @branchHint(.unlikely);
-        res.value_ptr.* = device.loadImage(img);
+        const tex, const srv = device.loadImage(img);
+
+        res.value_ptr.* = .{
+            .tex = tex,
+            .srv = srv,
+            .modified = img.modified,
+        };
     }
 
-    return res.value_ptr.@"1";
+    if (res.value_ptr.modified != img.modified) {
+        device.updateImage(res.value_ptr.tex, img);
+    }
+
+    return res.value_ptr.srv;
 }
 
 fn Present(
