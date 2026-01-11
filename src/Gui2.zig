@@ -1,6 +1,9 @@
 const std = @import("std");
 const shared = @import("gui/shared.zig");
 const Image = @import("graphics/Image.zig");
+const FontRenderer = @import("graphics/FontRenderer.zig");
+
+const unicode = std.unicode;
 
 const Gui = @This();
 
@@ -20,6 +23,8 @@ draw_commands: std.ArrayList(shared.DrawCommand),
 draw_verticies: std.ArrayList(shared.DrawVertex),
 draw_indecies: std.ArrayList(shared.DrawIndex),
 
+font_renderer: *FontRenderer,
+
 ctx: *anyopaque,
 request_srv: *const fn(ctx: *anyopaque, img: Image) *anyopaque,
 
@@ -27,6 +32,7 @@ pub fn init(
     draw_commands: []shared.DrawCommand,
     draw_verticies: []shared.DrawVertex,
     draw_indecies: []shared.DrawIndex,
+    font_renderer: *FontRenderer,
     ctx: *anyopaque,
     request_srv: *const fn(ctx: *anyopaque, img: Image) *anyopaque,
 ) Gui {
@@ -34,6 +40,7 @@ pub fn init(
         .draw_commands = .initBuffer(draw_commands),
         .draw_verticies = .initBuffer(draw_verticies),
         .draw_indecies = .initBuffer(draw_indecies),
+        .font_renderer = font_renderer,
         .ctx = ctx,
         .request_srv = request_srv,
     };
@@ -85,6 +92,43 @@ const DrawCommand = struct {
     indecies: []const u16,
     image: *anyopaque,
 };
+
+pub const Descriptor = struct {
+    size: f32 = 16.0,
+    color: u32 = 0xFFFFFFFF,
+};
+
+pub fn textW(gui: *Gui, pos: [2]f32, msg: []const u16, descriptor: Descriptor) !void {
+    var it = unicode.Wtf16LeIterator.init(msg);
+
+    var advance: f32 = 0.0;
+    while (it.nextCodepoint()) |codepoint| {
+        // todo: this is just stoopid that zig cant hash f32 so i need todo it my self ok
+        const glyph = try gui.font_renderer.getGlyph(.{ .size = @bitCast(descriptor.size), .codepoint = codepoint });
+        defer advance += @floatFromInt(glyph.metrics.advance_x);
+
+        const top = [2]f32{ pos[x] + @as(f32, @floatFromInt(glyph.metrics.bearing_x)) + advance, pos[y] + @as(f32, @floatFromInt(glyph.metrics.bearing_y)) };
+        const bot = [2]f32{ top[x] + @as(f32, @floatFromInt(glyph.width)), top[y] + @as(f32, @floatFromInt(glyph.height)) };
+
+        const verticies = [_]shared.DrawVertex{
+            .{ .pos = .{ top[x], top[y] }, .uv = .{ glyph.uv0[x], glyph.uv0[y] }, .col = descriptor.color, .flags = 5 },
+            .{ .pos = .{ bot[x], top[y] }, .uv = .{ glyph.uv1[x], glyph.uv0[y] }, .col = descriptor.color, .flags = 5 },
+            .{ .pos = .{ bot[x], bot[y] }, .uv = .{ glyph.uv1[x], glyph.uv1[y] }, .col = descriptor.color, .flags = 5 },
+            .{ .pos = .{ top[x], bot[y] }, .uv = .{ glyph.uv0[x], glyph.uv1[y] }, .col = descriptor.color, .flags = 5 },
+        };
+
+        const indecies = [_]u16{
+            0, 1, 2,
+            0, 2, 3,
+        };
+
+        gui.addDrawCommand(.{
+            .image = gui.request_srv(gui.ctx, gui.font_renderer.atlas.image),
+            .verticies = &verticies,
+            .indecies = &indecies,
+        });
+    }
+}
 
 // todo: on debug we can check if indecie are like in bounds
 fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {

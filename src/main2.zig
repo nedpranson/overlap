@@ -125,6 +125,7 @@ pub fn render(gui: *Gui) void {
         gui.rect(.{ -1.0 + pos[x] + @floor(bar_width), pos[y] + image_size }, .{ -1.0 + pos[x] + @floor(bar_width) + 1.0, pos[y] + image_size + 1.0 }, col);
     }
 
+    gui.textW(.{ 0.0, 0.0 }, unicode.wtf8ToWtf16LeStringLiteral("Hello World!"), .{}) catch unreachable;
 }
 
 pub fn sessionChanged(_: void, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {

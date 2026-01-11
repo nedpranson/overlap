@@ -58,7 +58,7 @@ pub fn update(img: *Image, data: []const u8) void {
     assert(math.mulWide(u32, img.width, img.height) * @intFromEnum(img.format) == data.len);
     assert(img.modified > 0);
 
-    // todo: no thread safety here!!!!
+    // todo: add thread safety here!!!!
     img.data = data.ptr;
     img.modified +%= 1;
 }

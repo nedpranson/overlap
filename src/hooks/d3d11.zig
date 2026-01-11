@@ -33,8 +33,13 @@ var resize_buffers: *@TypeOf(ResizeBuffers) = undefined;
 
 var hooked = false;
 
+// todo: make it global or sum
+var fr: @import("../graphics/FontRenderer.zig") = undefined;
+
 pub fn attach(d3d11_lib: windows.HMODULE) bool {
     assert(hooked == false);
+
+    fr = @import("../graphics/FontRenderer.zig").init(std.heap.page_allocator) catch return false;
 
     windows.AllocConsole() catch {};
 
@@ -272,6 +277,7 @@ fn Present(
         &draw_commands,
         &draw_verticies,
         &draw_indicies,
+        &fr,
         @constCast(&device),
         &requestSRV,
     );
