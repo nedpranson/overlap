@@ -13,6 +13,9 @@ const Context = struct {
 
     session: ?windows.GlobalSystemMediaTransportControlsSession = null,
 
+    title: []const u16 = &.{},
+    artist: []const u16 = &.{},
+
     cover: ?struct {
         img: Image,
         pixels: *windows.IPixelDataProvider,
@@ -53,6 +56,9 @@ pub fn cleanup() void {
     if (context.session) |session| {
         session.Release();
     }
+
+    gpa.allocator().free(context.title);
+    gpa.allocator().free(context.artist);
 
     manager.RemoveCurrentSessionChanged(token) catch unreachable;
     manager.Release();
@@ -125,7 +131,41 @@ pub fn render(gui: *Gui) void {
         gui.rect(.{ -1.0 + pos[x] + @floor(bar_width), pos[y] + image_size }, .{ -1.0 + pos[x] + @floor(bar_width) + 1.0, pos[y] + image_size + 1.0 }, col);
     }
 
-    gui.textW(.{ 0.0, 0.0 }, unicode.wtf8ToWtf16LeStringLiteral("Hello World!"), .{}) catch unreachable;
+
+    // properties
+    // todo: handle err
+    ellipsisW(gui, .{ pos[x] + image_size + padding, pos[y] + padding }, context.title, width, .{ .size = 12.0 }) catch unreachable;
+    ellipsisW(gui, .{ pos[x] + image_size + padding, pos[y] + padding + 20.0 }, context.artist, width, .{ .size = 10.0, .color = 0x808080FF }) catch unreachable;
+}
+
+fn ellipsisW(gui: *Gui, pos: [2]f32, msg: []const u16, width: f32, descriptor: Gui.Descriptor) !void {
+    const suffix_width = try gui.advanceWidthf('…', descriptor);
+
+    var text_width: f32 = 0.0;
+    var cut_width: f32 = 0.0;
+    var cut_units: usize = 0;
+
+    var it = unicode.Wtf16LeIterator.init(msg);
+    while (it.nextCodepoint()) |codepoint| {
+        text_width += try gui.advanceWidthf(codepoint, descriptor);
+
+        if (text_width > width) {
+            break;
+        }
+
+        if (codepoint != ' ' and width >= text_width + suffix_width) {
+            cut_width = text_width;
+            cut_units = it.i >> 1;
+        }
+    }
+
+    if (width >= text_width) {
+        try gui.textW(pos, msg, descriptor);
+        return;
+    }
+
+    try gui.textW(pos, msg[0..cut_units], descriptor);
+    try gui.textW(.{ pos[0] + cut_width, pos[1] }, unicode.wtf8ToWtf16LeStringLiteral("…"), descriptor);
 }
 
 pub fn sessionChanged(_: void, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
@@ -225,6 +265,12 @@ pub fn propartiesChanged(_: void, session: windows.GlobalSystemMediaTransportCon
         }),
         .pixels = pixels,
     };
+
+    gpa.allocator().free(context.title);
+    gpa.allocator().free(context.artist);
+
+    context.title = try gpa.allocator().dupe(u16, properties.Title());
+    context.artist = try gpa.allocator().dupe(u16, properties.Artist());
 }
 
 pub fn timelineChanged(_: void, session: windows.GlobalSystemMediaTransportControlsSession) !void {

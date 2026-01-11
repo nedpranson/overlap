@@ -1,4 +1,7 @@
 const std = @import("std");
+// todo: when onecore is complete use that
+// todo: add text shaping too
+// todo: colored fonts!!!
 const fat = @import("fat");
 const Atlas = @import("Atlas.zig");
 const Allocator = std.mem.Allocator;
