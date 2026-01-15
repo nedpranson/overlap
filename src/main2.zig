@@ -139,6 +139,8 @@ pub fn render(gui: *Gui) void {
 }
 
 fn ellipsisW(gui: *Gui, pos: [2]f32, msg: []const u16, width: f32, descriptor: Gui.Descriptor) !void {
+    // when we will have real kerning and stuff, shaping
+    // we could bin search the most optimal path
     const suffix_width = try gui.advanceWidthf('…', descriptor);
 
     var text_width: f32 = 0.0;
