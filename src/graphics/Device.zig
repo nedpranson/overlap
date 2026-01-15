@@ -1,5 +1,5 @@
 const std = @import("std");
-const shared = @import("../gui/shared.zig");
+const shared = @import("shared.zig");
 
 const Allocator = std.mem.Allocator;
 const Device = @This();

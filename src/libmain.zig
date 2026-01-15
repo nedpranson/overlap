@@ -1,93 +1,78 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const windows = @import("windows.zig");
-const root = @import("main.zig");
-const Thread = std.Thread;
-const minhook = @import("minhook.zig");
+const detours = @import("detours.zig");
+const hooks = @import("hooks.zig");
+const renderer = @import("renderer.zig");
 
-comptime {
-    if (!builtin.is_test) switch (builtin.os.tag) {
-        .windows => {
-            @export(&__overlap_hook_proc, .{ .name = "__overlap_hook_proc" });
-            @export(&DllMain, .{ .name = "DllMain" });
-        },
-        else => |os| @compileError("unsupported operating system: " ++ @tagName(os)),
-    };
+// maybe return like an error.Failed or smth so cleanup would not be called
+fn setup() bool {
+    return hooks.init();
 }
 
-fn entry(instance: windows.HINSTANCE) void {
-    root.main() catch |err| {
-        std.debug.print("error: {s}\n", .{@errorName(err)});
-        if (@errorReturnTrace()) |trace| {
-            std.debug.dumpStackTrace(trace.*);
-        }
-    };
+fn cleanup() void {
+    hooks.deinit();
+    renderer.cleanup();
+}
 
-    if (builtin.mode == .Debug) {
-        var byte: [1]u8 = undefined;
-        const stdin: std.fs.File = .stdin();
+var enabled: std.atomic.Value(bool) = .init(false);
 
-        _ = stdin.read(&byte) catch {};
-        windows.FreeConsole() catch {};
+// Todo: remove mutex
+var mutex: std.Thread.Mutex = .{};
+var success = false;
+
+pub export fn __overlap_hook_proc(code: c_int, wParam: windows.WPARAM, lParam: windows.LPARAM) callconv(.winapi) windows.LRESULT {
+    if (isTargetProcess() and enabled.cmpxchgStrong(false, true, .acq_rel, .monotonic) == null) {
+        mutex.lock();
+        defer mutex.unlock();
+
+        success = @call(.always_inline, setup, .{});
     }
 
-    windows.FreeLibraryAndExitThread(@ptrCast(instance), 0);
-}
-
-pub fn __overlap_hook_proc(code: c_int, wParam: windows.WPARAM, lParam: windows.LPARAM) callconv(.winapi) windows.LRESULT {
     return windows.user32.CallNextHookEx(null, code, wParam, lParam);
 }
 
-pub fn DllMain(instance: windows.HINSTANCE, reason: windows.DWORD, reserved: windows.LPVOID) callconv(.winapi) windows.BOOL {
-    _ = instance;
-    _ = reserved;
+pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpvReserved: windows.LPVOID) callconv(.winapi) windows.BOOL {
+    _ = hinstDLL;
+    _ = lpvReserved;
 
-    switch (reason) {
-        windows.DLL_PROCESS_ATTACH => {
-            const kernel32 = windows.GetModuleHandle("kernel32") catch return windows.FALSE;
+    if (fdwReason == windows.DLL_PROCESS_DETACH and isTargetProcess() and enabled.load(.acquire)) {
+        mutex.lock();
+        defer mutex.unlock();
 
-            const load_library_a = windows.GetProcAddress("LoadLibraryA") catch unreachable;
-            const load_library_w = windows.GetProcAddress("LoadLibraryW") catch unreachable;
-        },
-        windows.DLL_PROCESS_DETACH => {
-            minhook.MH_Uninitialize() catch {};
-        },
-        else => {},
+        if (success) {
+            // calling winapi inside DllMain is 'forbidden'
+            @call(.always_inline, cleanup, .{});
+        }
     }
-
-    // hook LoadLibrary
 
     return windows.TRUE;
-    //if (builtin.mode == .Debug) {
-    //if (reason == windows.DLL_PROCESS_ATTACH) {
-    //windows.AllocConsole() catch |err| switch (err) {
-    //error.AccessDenied => {},
-    //else => return windows.FALSE,
-    //};
-
-    //windows.SetConsoleTitle("overlap") catch return windows.FALSE;
-    //}
-    //}
-
-    //return tracedDllMain(instance, reason, reserved) catch |err| blk: {
-    //std.debug.print("error: {s}\n", .{@errorName(err)});
-    //if (@errorReturnTrace()) |trace| {
-    //std.debug.dumpStackTrace(trace.*);
-    //}
-
-    //break :blk windows.FALSE;
-    //};
 }
 
-inline fn tracedDllMain(instance: windows.HINSTANCE, reason: windows.DWORD, _: windows.LPVOID) (windows.DisableThreadLibraryCallsError || Thread.SpawnError)!windows.BOOL {
-    if (reason == windows.DLL_PROCESS_ATTACH) {
-        try windows.DisableThreadLibraryCalls(@ptrCast(instance));
-
-        const thread = try Thread.spawn(.{}, entry, .{instance});
-        thread.detach();
-
-        return windows.TRUE;
+fn isTargetProcess() bool {
+    if (windows.GetModuleHandle(null)) |handle| {
+        _ = windows.GetProcAddress(handle, "__overlap_ignore_proc") catch return true;
     }
-
-    return windows.FALSE;
+    return false;
 }
+
+fn logFn(
+    comptime message_level: std.log.Level,
+    comptime scope: @Type(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const level_txt = comptime message_level.asText();
+    const prefix2 = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
+
+    var buffer = [_]u8{'\x00'} ** 4096;
+    const msg = std.fmt.bufPrintZ(&buffer, level_txt ++ prefix2 ++ format, args) catch blk: {
+        buffer[buffer.len - 1] = '\x00';
+        break :blk buffer[0 .. buffer.len - 1 :0];
+    };
+
+    windows.OutputDebugString(msg);
+}
+
+pub const std_options: std.Options = .{
+    .logFn = logFn,
+};

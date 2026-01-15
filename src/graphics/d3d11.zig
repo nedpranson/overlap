@@ -1,8 +1,7 @@
 const std = @import("std");
 const windows = @import("../windows.zig");
-const shared = @import("../gui/shared.zig");
-const graphics = @import("../graphics.zig");
-const Image = @import("../graphics/Image.zig");
+const shared = @import("shared.zig");
+const Image = @import("Image.zig");
 
 const mem = std.mem;
 const dxgi = windows.dxgi;
@@ -65,19 +64,14 @@ pub const Device = struct {
 
     sampler: *d3d11.ID3D11SamplerState,
 
-    //white_pixel_texture: *d3d11.ID3D11Texture2D,
-    //white_pixel_resource: *d3d11.ID3D11ShaderResourceView,
-
-    //image_map: std.AutoHashMapUnmanaged(u32, struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView }) = .empty,
-
     pub const Error = error{
         OutOfMemory,
         Unexpected,
     };
 
     pub fn init(swap_chain: *dxgi.IDXGISwapChain) Error!Device {
-        const vs = @embedFile("../gui/shaders/vs.hlsl");
-        const ps = @embedFile("../gui/shaders/ps.hlsl");
+        const vs = @embedFile("shaders/vs.hlsl");
+        const ps = @embedFile("shaders/ps.hlsl");
 
         var device: *d3d11.ID3D11Device = undefined;
 

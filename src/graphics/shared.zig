@@ -1,5 +1,3 @@
-const Image = @import("Image.zig");
-
 // how many quads we can draw
 pub const max_draw_commands = 128;
 pub const max_verticies = max_draw_commands * 4;

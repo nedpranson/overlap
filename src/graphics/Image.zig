@@ -35,6 +35,11 @@ pub const Desc = struct {
     usage: Usage = .static,
 };
 
+// todo: Add like a lock here
+// so we could safely get its data and shit
+// i think now we crash only cuz of races
+// with main render and update image
+
 pub fn init(desc: Desc) Image {
     assert(math.mulWide(u32, desc.width, desc.height) * @intFromEnum(desc.format) == desc.data.len);
 

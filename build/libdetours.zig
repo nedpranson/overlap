@@ -20,8 +20,12 @@ pub fn buildLibrary(b: *std.Build, options: anytype) *std.Build.Step.Compile {
     });
 
     // if compiling with msvc we need to link with libc not libcpp
-    // some zig bug
-    lib.linkLibCpp();
+    // https://github.com/ziglang/zig/issues/5312
+    if (target.result.abi == .msvc) {
+        lib.linkLibC();
+    } else {
+        lib.linkLibCpp();
+    }
 
     lib.addIncludePath(detours.path("src"));
     lib.root_module.addCMacro("WIN32_LEAN_AND_MEAN", "");

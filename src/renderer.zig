@@ -1,6 +1,6 @@
 const std = @import("std");
-const Gui = @import("Gui2.zig");
-const main = @import("main2.zig");
+const Gui = @import("Gui.zig");
+const main = @import("main.zig");
 
 const atomic = std.atomic;
 

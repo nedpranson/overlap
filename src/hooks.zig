@@ -3,7 +3,7 @@ const windows = @import("windows.zig");
 const graphics = @import("graphics.zig");
 const d3d11 = @import("hooks/d3d11.zig");
 const detours = @import("detours.zig");
-const Gui = @import("Gui2.zig");
+const Gui = @import("Gui.zig");
 const Image = @import("graphics/Image.zig");
 
 const mem = std.mem;

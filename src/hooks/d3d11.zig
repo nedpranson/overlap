@@ -3,9 +3,9 @@ const windows = @import("../windows.zig");
 const detours = @import("../detours.zig");
 const hooks = @import("../hooks.zig");
 const graphics = @import("../graphics.zig");
-const Gui = @import("../Gui2.zig");
+const Gui = @import("../Gui.zig");
 const renderer = @import("../renderer.zig");
-const shared = @import("../gui/shared.zig");
+const shared = @import("../graphics/shared.zig");
 const Image = @import("../graphics/Image.zig");
 
 const d3d11 = windows.d3d11;

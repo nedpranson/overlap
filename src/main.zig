@@ -1,287 +1,146 @@
 const std = @import("std");
-const fat = @import("fat");
-const Hook = @import("Hook.zig");
 const windows = @import("windows.zig");
-const mem = std.mem;
-const unicode = std.unicode;
-const Io = std.Io;
-const Allocator = std.mem.Allocator;
+const Gui = @import("Gui.zig");
+const Image = @import("graphics/Image.zig");
 
-// Before alpha...
-//  Handling progressbar
-//  handling non square covers
+const unicode = std.unicode;
+const mem = std.mem;
+const Allocator = std.mem.Allocator;
+const Thread = std.Thread;
 
 const Context = struct {
-    /// Must be threadsafe.
-    allocator: Allocator,
+    mutex: Thread.Mutex = .{},
 
     session: ?windows.GlobalSystemMediaTransportControlsSession = null,
 
-    // todo: make this thingy comptime
-    image_size: u32,
-
-    mutex: std.Thread.Mutex = .{},
-    modified: u16 = 0,
-
-    image_pixels: ?*windows.IPixelDataProvider = null,
-
     title: []const u16 = &.{},
     artist: []const u16 = &.{},
+
+    cover: ?struct {
+        img: Image,
+        pixels: *windows.IPixelDataProvider,
+    } = null,
 
     timeline: struct {
         last_updated: i64 = 0,
         end_time: i64 = 0,
         position: i64 = 0,
     } = .{},
-
-    pub fn deinit(self: *Context) void {
-        if (self.image_pixels) |image_pixels| {
-            image_pixels.Release();
-        }
-        if (self.session) |session| {
-            session.Release();
-        }
-        self.allocator.free(self.title);
-        self.allocator.free(self.artist);
-        self.* = undefined;
-    }
 };
 
-pub fn timelineChanged(context: *Context, session: windows.GlobalSystemMediaTransportControlsSession) !void {
-    const timeline = try session.GetTimelineProperties();
-    defer timeline.Release();
+// this undefined stuff sucks
+var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
 
-    const timestamp = std.time.milliTimestamp();
+var manager: windows.GlobalSystemMediaTransportControlsSessionManager = undefined;
+var context: Context = .{};
 
-    context.mutex.lock();
-    defer context.mutex.unlock();
+var token: i64 = undefined;
 
-    context.timeline.last_updated = timestamp;
-    context.timeline.end_time = @divTrunc(timeline.EndTime(), 10000);
-    context.timeline.position = @divTrunc(timeline.Position(), 10000);
+pub fn setup() !void {
+    const allocator = gpa.allocator();
+
+    try windows.RoInitialize(windows.RO_INIT_MULTITHREADED);
+    errdefer windows.RoUninitialize();
+
+    manager = try (try windows.GlobalSystemMediaTransportControlsSessionManager.RequestAsync()).getAndForget(allocator);
+    errdefer manager.Release();
+
+    try sessionChanged({}, manager);
+
+    token = try manager.CurrentSessionChanged(allocator, {}, sessionChanged);
+    errdefer manager.RemoveCurrentSessionChanged(token) catch unreachable;
 }
 
-// todo: idk we need like a way to handle if thumbnail is null
-// todo: fix a bug where we do not update our props if thumbnail is not a thing
-pub fn propartiesChanged(context: *Context, session: windows.GlobalSystemMediaTransportControlsSession) !void {
-    const properties = try (try session.TryGetMediaPropertiesAsync()).getAndForget(context.allocator);
-    defer properties.Release();
-
-    const thumbnail = (try properties.Thumbnail()) orelse return;
-    defer thumbnail.Release();
-
-    const stream = try (try thumbnail.OpenReadAsync()).getAndForget(context.allocator);
-    defer stream.Release();
-
-    const decoder = try (try windows.BitmapDecoder.CreateAsync(@ptrCast(stream))).getAndForget(context.allocator);
-    defer decoder.Release();
-
-    const frame = try (try decoder.GetFrameAsync(0)).getAndForget(context.allocator);
-    defer frame.Release();
-
-    const transform = try windows.IBitmapTransform.new();
-    defer transform.Release();
-
-    transform.put_InterpolationMode(.Fant);
-
-    const spotify_packaged_id = unicode.utf8ToUtf16LeStringLiteral("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify");
-    const spotify_unpackaged_id = unicode.utf8ToUtf16LeStringLiteral("Spotify.exe");
-
-    const model_id = try session.SourceAppUserModelId();
-
-    // Crops out Spotifies branding from original thumbnail's image.
-    if (mem.eql(u16, model_id, spotify_packaged_id) or mem.eql(u16, model_id, spotify_unpackaged_id)) {
-        // Perhaps this solution does not look so great, but I think it is the best option.
-
-        transform.put_ScaledHeight(@intFromFloat(@as(f32, @floatFromInt(context.image_size)) * 1.2821));
-        transform.put_ScaledWidth(@intFromFloat(@as(f32, @floatFromInt(context.image_size)) * 1.2821));
-
-        transform.put_Bounds(.{
-            .X = @intFromFloat(0.11 * 1.2821 * @as(f32, @floatFromInt(context.image_size))),
-            .Y = 0,
-            .Width = context.image_size,
-            .Height = context.image_size,
-        });
-    } else {
-        transform.put_ScaledHeight(context.image_size);
-        transform.put_ScaledWidth(context.image_size);
+pub fn cleanup() void {
+    // todo: release context cover img
+    if (context.session) |session| {
+        session.Release();
     }
 
-    // todo: handle like non square ones
+    gpa.allocator().free(context.title);
+    gpa.allocator().free(context.artist);
 
-    const pixels = try (try frame.GetPixelDataTransformedAsync(
-        windows.BitmapPixelFormat_Rgba8,
-        windows.BitmapAlphaMode_Premultiplied,
-        transform,
-        windows.ExifOrientationMode_IgnoreExifOrientation,
-        windows.ColorManagementMode_DoNotColorManage,
-    )).getAndForget(context.allocator);
-    errdefer pixels.Release();
+    manager.RemoveCurrentSessionChanged(token) catch unreachable;
+    manager.Release();
 
-    context.mutex.lock();
-    defer context.mutex.unlock();
+    windows.RoUninitialize();
 
-    if (context.image_pixels) |image_pixels| {
-        image_pixels.Release();
-    }
-
-    context.allocator.free(context.title);
-    context.allocator.free(context.artist);
-
-    context.title = try context.allocator.dupe(u16, properties.Title());
-    context.artist = try context.allocator.dupe(u16, properties.Artist());
-
-    context.image_pixels = pixels;
-
-    context.modified +%= 1;
+    _ = gpa.deinit();
 }
 
-pub fn sessionChanged(context: *Context, manager: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
+// now how can we make images indipendent?
+// so same rendering code would work for d3d11, opengl, vulkan
+pub fn render(gui: *Gui) void {
     const session = blk: {
         context.mutex.lock();
         defer context.mutex.unlock();
 
-        if (context.session) |session| {
-            session.Release();
-            context.session = null;
-        }
-
-        context.session = (try manager.GetCurrentSession()) orelse {
-            if (context.image_pixels) |image_pixels| {
-                image_pixels.Release();
-                context.image_pixels = null;
-            }
-
-            context.modified +%= 1;
-            return;
-        };
-
-        break :blk context.session.?;
+        break :blk context.session orelse return;
     };
 
-    try propartiesChanged(context, session);
-    try timelineChanged(context, session);
+    const pos = &[2]f32{ 24.0, 24.0 };
 
-    // todo: log life cycles of these hooks as myh guess is we're leaking memory
-    _ = try session.MediaPropertiesChanged(context.allocator, context, propartiesChanged);
-    _ = try session.TimelinePropertiesChanged(context.allocator, context, timelineChanged);
-}
+    const image_size = 64.0;
+    const padding = 16.0;
 
-pub fn main() !void {
-    var debug_allocator = std.heap.DebugAllocator(.{ .thread_safe = true }){};
+    const width = 198.0;
 
-    const allocator = debug_allocator.allocator();
-    defer _ = debug_allocator.deinit(); // unsafe as those COM objects can have longer lifespan than this stack function
+    const x = 0;
+    const y = 1;
 
-    var context = Context{
-        .allocator = allocator,
-        .image_size = 64,
-    };
-    defer context.deinit();
+    // background
+    gui.rect(.{ -1.0 + pos[x], -1.0 + pos[y] }, .{ pos[x] + image_size + padding + width + padding + 1.0, pos[y] + image_size + 1.0 }, 0x202E36FF);
+    gui.rect(.{ pos[x], pos[y] }, .{ pos[x] + image_size + padding + width + padding, pos[y] + image_size }, 0x10191EFF);
 
-    try windows.RoInitialize(windows.RO_INIT_MULTITHREADED);
-    defer windows.RoUninitialize();
 
-    const manager = try (try windows.GlobalSystemMediaTransportControlsSessionManager.RequestAsync()).getAndForget(allocator);
-    defer manager.Release();
+    context.mutex.lock();
+    if (context.cover) |cov| {
+        gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, cov.img);
+    }
+    context.mutex.unlock();
 
-    try sessionChanged(&context, manager);
+    // cover
 
-    // todo: remove this id
-    _ = try manager.CurrentSessionChanged(allocator, &context, sessionChanged);
-
-    var hook: Hook = try .init();
-    defer hook.deinit();
-
-    try hook.attach(allocator);
-    defer hook.detach();
-
-    const gui = hook.gui();
-
-    var image: ?Hook.Image = null;
-    defer if (image) |img| {
-        img.deinit(allocator);
-    };
-
-    var modified: u32 = 0;
-    while (true) {
-        try hook.newFrame();
-        defer hook.endFrame();
-
+    const progress = blk: {
         context.mutex.lock();
         defer context.mutex.unlock();
 
-        const session = context.session orelse continue;
+        // TODO: capture them errors !!!
+        const playback_info = session.GetPlaybackInfo() catch unreachable;
+        defer playback_info.Release();
 
-        blk: {
-            defer modified = context.modified;
-            if (modified == context.modified) break :blk;
-
-            if (image) |img| {
-                img.deinit(allocator);
-                image = null;
-            }
-
-            const pixels = context.image_pixels orelse break :blk;
-
-            var ptr: [*]const u8 = undefined;
-            var len: u32 = undefined;
-            pixels.DetachPixelData(&len, &ptr); // todo: add PixelDataProvider
-
-            image = try hook.loadImage(allocator, .{
-                .width = context.image_size,
-                .height = context.image_size,
-                .data = ptr[0..len],
-                .format = .rgba,
-            });
+        if (playback_info.PlaybackStatus() != .Playing) {
+            break :blk context.timeline.position;
         }
 
-        const cover = image orelse continue;
+        const timestamp = std.time.milliTimestamp();
+        const elapsed = timestamp - context.timeline.last_updated;
 
-        const pos = &[2]f32{ 24.0, 24.0 };
+        break :blk context.timeline.position + elapsed;
+    };
 
-        const image_size: f32 = @floatFromInt(context.image_size);
-        const padding = 16.0;
+    const bar_max_width = image_size + padding + width + padding + 2.0;
+    const bar_width = @min(@as(f32, @floatFromInt(progress)) / @as(f32, @floatFromInt(context.timeline.end_time)), 1.0) * bar_max_width;
+    const fraction = bar_width - @floor(bar_width);
 
-        const width = 198.0;
-
-        const x = 0;
-        const y = 1;
-
-        // background
-        gui.rect(.{ -1.0 + pos[x], -1.0 + pos[y] }, .{ pos[x] + image_size + padding + width + padding + 1.0, pos[y] + image_size + 1.0 }, 0x202E36FF);
-        gui.rect(.{ pos[x], pos[y] }, .{ pos[x] + image_size + padding + width + padding, pos[y] + image_size }, 0x10191EFF);
-
-        // cover
-        gui.image(.{ pos[x], pos[y] }, .{ pos[x] + image_size, pos[y] + image_size }, cover);
-
-        const progress = blk: {
-            const playback_info = try session.GetPlaybackInfo();
-            defer playback_info.Release();
-
-            if (playback_info.PlaybackStatus() != .Playing) {
-                break :blk context.timeline.position;
-            }
-
-            const timestamp = std.time.milliTimestamp();
-            const elapsed = timestamp - context.timeline.last_updated;
-
-            break :blk context.timeline.position + elapsed;
-        };
-
-        const bar_max_width = image_size + padding + width + padding + 2.0;
-        const bar_width = @min(@as(f32, @floatFromInt(progress)) / @as(f32, @floatFromInt(context.timeline.end_time)), 1.0) * bar_max_width;
-
-        // progress bar
-        gui.rect(.{ -1.0 + pos[x], pos[y] + image_size }, .{ -1.0 + pos[x] + bar_width, pos[y] + image_size + 1.0 }, 0x00DFA2FF);
-
-        // properties
-        try ellipsisW(gui, .{ pos[x] + image_size + padding, pos[y] + padding }, context.title, width, .{ .size = 12.0 });
-        try ellipsisW(gui, .{ pos[x] + image_size + padding, pos[y] + padding + 20.0 }, context.artist, width, .{ .size = 10.0, .color = 0x808080FF });
+    // progress bar
+    gui.rect(.{ -1.0 + pos[x], pos[y] + image_size }, .{ -1.0 + pos[x] + @floor(bar_width), pos[y] + image_size + 1.0 }, 0x00DFA2FF);
+    if (fraction > 0.0) {
+        // making it smoother
+        const col = 0x00DFA200 + @as(u32, @intFromFloat(fraction * 255.0));
+        gui.rect(.{ -1.0 + pos[x] + @floor(bar_width), pos[y] + image_size }, .{ -1.0 + pos[x] + @floor(bar_width) + 1.0, pos[y] + image_size + 1.0 }, col);
     }
+
+
+    // properties
+    // todo: handle err
+    ellipsisW(gui, .{ pos[x] + image_size + padding, pos[y] + padding }, context.title, width, .{ .size = 12.0 }) catch unreachable;
+    ellipsisW(gui, .{ pos[x] + image_size + padding, pos[y] + padding + 20.0 }, context.artist, width, .{ .size = 10.0, .color = 0x808080FF }) catch unreachable;
 }
 
-fn ellipsisW(gui: *Hook.Gui, pos: [2]f32, msg: []const u16, width: f32, descriptor: Hook.Descriptor) !void {
+fn ellipsisW(gui: *Gui, pos: [2]f32, msg: []const u16, width: f32, descriptor: Gui.Descriptor) !void {
+    // when we will have real kerning and stuff, shaping
+    // we could bin search the most optimal path
     const suffix_width = try gui.advanceWidthf('…', descriptor);
 
     var text_width: f32 = 0.0;
@@ -309,4 +168,124 @@ fn ellipsisW(gui: *Hook.Gui, pos: [2]f32, msg: []const u16, width: f32, descript
 
     try gui.textW(pos, msg[0..cut_units], descriptor);
     try gui.textW(.{ pos[0] + cut_width, pos[1] }, unicode.wtf8ToWtf16LeStringLiteral("…"), descriptor);
+}
+
+pub fn sessionChanged(_: void, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
+    const session = blk: {
+        context.mutex.lock();
+        defer context.mutex.unlock();
+
+        if (context.session) |session| {
+            session.Release();
+            context.session = null;
+        }
+
+        context.session = (try manager.GetCurrentSession()) orelse return;
+        break :blk context.session.?;
+    };
+
+    try timelineChanged({}, session);
+    try propartiesChanged({}, session);
+
+    _ = try session.TimelinePropertiesChanged(gpa.allocator(), {}, timelineChanged);
+    _ = try session.MediaPropertiesChanged(gpa.allocator(), {}, propartiesChanged);
+}
+
+pub fn propartiesChanged(_: void, session: windows.GlobalSystemMediaTransportControlsSession) !void {
+    const properties = try (try session.TryGetMediaPropertiesAsync()).getAndForget(gpa.allocator());
+    defer properties.Release();
+
+    const thumbnail = (try properties.Thumbnail()) orelse return;
+    defer thumbnail.Release();
+
+    const stream = try (try thumbnail.OpenReadAsync()).getAndForget(gpa.allocator());
+    defer stream.Release();
+
+    const decoder = try (try windows.BitmapDecoder.CreateAsync(@ptrCast(stream))).getAndForget(gpa.allocator());
+    defer decoder.Release();
+
+    const frame = try (try decoder.GetFrameAsync(0)).getAndForget(gpa.allocator());
+    defer frame.Release();
+
+    const transform = try windows.IBitmapTransform.new();
+    defer transform.Release();
+
+    transform.put_InterpolationMode(.Fant);
+
+    const spotify_packaged_id = unicode.utf8ToUtf16LeStringLiteral("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify");
+    const spotify_unpackaged_id = unicode.utf8ToUtf16LeStringLiteral("Spotify.exe");
+
+    const model_id = try session.SourceAppUserModelId();
+
+    // Crops out Spotifies branding from original thumbnail's image.
+    if (mem.eql(u16, model_id, spotify_packaged_id) or mem.eql(u16, model_id, spotify_unpackaged_id)) {
+        // Perhaps this solution does not look so great, but I think it is the best option.
+
+        transform.put_ScaledHeight(@intFromFloat(64.0 * 1.2821));
+        transform.put_ScaledWidth(@intFromFloat(64.0 * 1.2821));
+
+        transform.put_Bounds(.{
+            .X = @intFromFloat(0.11 * 1.2821 * 64.0),
+            .Y = 0,
+            .Width = 64,
+            .Height = 64,
+        });
+    } else {
+        transform.put_ScaledHeight(64);
+        transform.put_ScaledWidth(64);
+    }
+
+    // todo: handle like non square ones
+
+    const pixels = try (try frame.GetPixelDataTransformedAsync(
+        windows.BitmapPixelFormat_Rgba8,
+        windows.BitmapAlphaMode_Premultiplied,
+        transform,
+        windows.ExifOrientationMode_IgnoreExifOrientation,
+        windows.ColorManagementMode_DoNotColorManage,
+    )).getAndForget(gpa.allocator());
+    errdefer pixels.Release();
+
+    context.mutex.lock();
+    defer context.mutex.unlock();
+
+    if (context.cover) |cov| {
+        cov.img.deinit();
+        cov.pixels.Release();
+    }
+
+    var ptr: [*]const u8 = undefined;
+    var len: u32 = undefined;
+    pixels.DetachPixelData(&len, &ptr); // todo: add PixelDataProvider
+
+    context.cover = .{
+        .img = .init(.{
+            .width = 64,
+            .height = 64,
+            .data = ptr[0..len],
+            .format = .rgba,
+        }),
+        .pixels = pixels,
+    };
+
+    gpa.allocator().free(context.title);
+    gpa.allocator().free(context.artist);
+
+    context.title = try gpa.allocator().dupe(u16, properties.Title());
+    context.artist = try gpa.allocator().dupe(u16, properties.Artist());
+}
+
+pub fn timelineChanged(_: void, session: windows.GlobalSystemMediaTransportControlsSession) !void {
+    const timeline = try session.GetTimelineProperties();
+    defer timeline.Release();
+
+    const timestamp = std.time.milliTimestamp();
+
+    // perhaps when working with COM stuff we can use RW locks
+    context.mutex.lock();
+    defer context.mutex.unlock();
+
+    context.timeline.last_updated = timestamp;
+    context.timeline.end_time = @divTrunc(timeline.EndTime(), 10000);
+    context.timeline.position = @divTrunc(timeline.Position(), 10000);
 }
