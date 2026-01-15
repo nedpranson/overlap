@@ -9,6 +9,7 @@ const Image = @import("graphics/Image.zig");
 const mem = std.mem;
 const unicode = std.unicode;
 const Mutex = std.Thread.Mutex;
+const Allocator = mem.Allocator;
 const assert = std.debug.assert;
 
 var mutex: Mutex = .{};
@@ -21,7 +22,7 @@ var hooked = false;
 pub const hooks = [_]Hook{d3d11.interface};
 
 pub const Hook = struct {
-    attach: *const fn (lib: windows.HMODULE) bool,
+    attach: *const fn (gpa: Allocator, lib: windows.HMODULE) bool,
     detach: *const fn () void,
     uload_image: *const fn (id: u32) void,
 };
@@ -76,7 +77,7 @@ pub fn init() bool {
 
     if (windows.GetModuleHandle("d3d11.dll")) |mod| {
         // TODO: Unsafe
-        _ = d3d11.attach(mod);
+        _ = d3d11.attach(std.heap.page_allocator, mod);
     }
 
     failure = false;
@@ -113,7 +114,7 @@ fn LoadLibraryA(lpLibFileName: windows.LPCSTR) callconv(.winapi) ?windows.HMODUL
         defer mutex.unlock();
 
         // TODO: Unsafe
-        _ = d3d11.attach(lib);
+        _ = d3d11.attach(std.heap.page_allocator, lib);
     }
 
     return lib;
@@ -128,7 +129,7 @@ fn LoadLibraryW(lpLibFileName: windows.LPCWSTR) callconv(.winapi) ?windows.HMODU
         defer mutex.unlock();
 
         // TODO: Unsafe
-        _ = d3d11.attach(lib);
+        _ = d3d11.attach(std.heap.page_allocator, lib);
     }
 
     return lib;

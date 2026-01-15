@@ -1,9 +1,10 @@
 const std = @import("std");
 const hooks = @import("../hooks.zig");
 
-const assert = std.debug.assert;
 const atomic = std.atomic;
 const math = std.math;
+const Mutex = std.Thread.Mutex;
+const assert = std.debug.assert;
 
 const Image = @This();
 
@@ -12,7 +13,7 @@ pub const Format = enum(u4) {
     rgba = 4,
 };
 
-pub const Usage = enum(u4) {
+pub const Usage = enum(u1) {
     static,
     dynamic,
 };
@@ -20,12 +21,14 @@ pub const Usage = enum(u4) {
 width: u32,
 height: u32,
 
-data: [*]const u8,
+data: [*]const u8, // can change if dynamic
 
 id: u32,
-modified: u16 = 0,
+modified: u16 = 0, // can change if dynamic
 
 format: Format,
+
+// mu: Mutex = .{},
 
 pub const Desc = struct {
     width: u32,
@@ -61,6 +64,10 @@ pub fn deinit(img: Image) void {
 
 pub fn update(img: *Image, data: []const u8) void {
     assert(math.mulWide(u32, img.width, img.height) * @intFromEnum(img.format) == data.len);
+
+    //img.mu.lock();
+    //defer img.mu.unlock();
+
     assert(img.modified > 0);
 
     // todo: add thread safety here!!!!
@@ -68,6 +75,7 @@ pub fn update(img: *Image, data: []const u8) void {
     img.modified +%= 1;
 }
 
+// Thread-safe
 fn generate_id() u32 {
     const static = struct {
         // set to one as zero is 1x1 white image pixel id (default)
