@@ -1,19 +1,22 @@
 const std = @import("std");
+
 const windows = @import("../windows.zig");
 const detours = @import("../detours.zig");
 const hooks = @import("../hooks.zig");
 const graphics = @import("../graphics.zig");
-const Gui = @import("../Gui.zig");
 const renderer = @import("../renderer.zig");
 const shared = @import("../graphics/shared.zig");
+const Gui = @import("../Gui.zig");
 const Image = @import("../graphics/Image.zig");
+const SynchronizedHashMap = @import("../util.zig").SynchronizedHashMap;
+const SynchronizedArrayList = @import("../util.zig").SynchronizedArrayList;
 
 const d3d11 = windows.d3d11;
 const dxgi = windows.dxgi;
 const d3dcommon = windows.d3dcommon;
-const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
+const assert = std.debug.assert;
 
 pub const interface: hooks.Hook = .{
     .attach = &attach,
@@ -31,9 +34,11 @@ const Resource = struct {
 
 const Instance = struct {
     device: graphics.d3d11.Device,
-    resources: std.AutoHashMapUnmanaged(u32, Resource),
 
-    fn deinit(self: *Instance) void {
+    resources: std.AutoHashMapUnmanaged(u32, Resource),
+    //unloaded_resources: SynchronizedArrayList(u32),
+
+    fn deinit(self: *Instance, allocator: Allocator) void {
         var it = self.resources.valueIterator();
         while (it.next()) |v| {
             v.srv.Release();
@@ -45,10 +50,10 @@ const Instance = struct {
     }
 };
 
-var instance_map: std.AutoHashMapUnmanaged(*dxgi.IDXGISwapChain, Instance) = .empty;
-var instance_map_mu: Thread.Mutex = .{};
+allocator: Allocator,
+instance_map: SynchronizedHashMap(*dxgi.IDXGISwapChain, Instance),
 
-var allocator: Allocator = undefined;
+var zelf: ?@This() = null;
 
 // There should be a way to make these lock free
 // perhaps thread local
@@ -58,13 +63,11 @@ var release: *@TypeOf(Release) = undefined;
 var present: *@TypeOf(Present) = undefined;
 var resize_buffers: *@TypeOf(ResizeBuffers) = undefined;
 
-var hooked = false;
-
 // todo: make it global or sum
 var fr: @import("../graphics/FontRenderer.zig") = undefined;
 
 pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
-    assert(hooked == false);
+    assert(zelf == null);
 
     // todo: implement valid global! font renderer
     fr = @import("../graphics/FontRenderer.zig").init(std.heap.page_allocator) catch return false;
@@ -186,15 +189,17 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
     };
 
     failure = false;
-    hooked = true;
 
-    allocator = gpa;
+    zelf = .{
+        .instance_map = .empty,
+        .allocator = gpa,
+    };
 
     return true;
 }
 
 pub fn detach() void {
-    assert(hooked == true);
+    const hook = &zelf.?;
 
     defer present = undefined;
     defer resize_buffers = undefined;
@@ -211,42 +216,50 @@ pub fn detach() void {
         std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
     };
 
-    var it = instance_map.valueIterator();
+    var it = hook.instance_map.valueIterator();
+    defer it.done(); // todo: idk remove this no need to sync here
+
     while (it.next()) |ins| {
-        ins.deinit();
+        ins.deinit(hook.allocator);
     }
 
-    instance_map.deinit(allocator);
-    instance_map = .empty;
+    hook.instance_map.deinit(hook.allocator);
+
+    zelf = null;
 }
 
+// can be called from any thread
+// very dangerous function
+// maybe have an array list of like unresolved images
+// and after device render we could try to free some of it
+// can be even called when hook is not active
 pub fn unloadImage(id: u32) void {
-    instance_map_mu.lock();
-    defer instance_map_mu.unlock();
+    _ = id;
+    //instance_map_mu.lock();
+    //defer instance_map_mu.unlock();
 
-    var it = instance_map.valueIterator();
-    while (it.next()) |ins| {
-        if (ins.resources.fetchRemove(id)) |kv| {
-            kv.value.srv.Release();
-            kv.value.tex.Release();
-        }
-    }
+    //var it = instance_map.valueIterator();
+    //while (it.next()) |ins| {
+        //if (ins.resources.fetchRemove(id)) |kv| {
+            //kv.value.srv.Release();
+            //kv.value.tex.Release();
+        //}
+    //}
 }
 
+// todo: need to make this threadsafe!!!
 pub fn active() bool {
-    return hooked;
+    return zelf != null;
 }
 
 fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
+    const hook = &zelf.?;
     const refs = release(pIUnknown);
 
     if (refs == 0) {
-        instance_map_mu.lock();
-        defer instance_map_mu.unlock();
-
-        if (instance_map.fetchRemove(@ptrCast(pIUnknown))) |kv| {
+        if (hook.instance_map.fetchRemove(@ptrCast(pIUnknown))) |kv| {
             var ins = kv.value;
-            ins.deinit();
+            ins.deinit(hook.allocator);
         }
     }
 
@@ -272,9 +285,7 @@ const ImageCache = struct {
 
 fn requestSRV(ctx: *anyopaque, img: Image) *anyopaque {
     const ins: *Instance = @ptrCast(@alignCast(ctx));
-
-    instance_map_mu.lock();
-    defer instance_map_mu.unlock();
+    const allocator = zelf.?.allocator;
 
     // todo: handle err
     // todo: unsafe for multi threading!!!
@@ -302,11 +313,11 @@ fn Present(
     SyncInterval: windows.UINT,
     Flags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
+    const hook = &zelf.?;
     const ins = blk: {
-        instance_map_mu.lock();
-        defer instance_map_mu.unlock();
+        const res = hook.instance_map.getOrPut(hook.allocator, pSwapChain) catch return present(pSwapChain, SyncInterval, Flags);
+        defer res.done();
 
-        const res = instance_map.getOrPut(allocator, pSwapChain) catch return present(pSwapChain, SyncInterval, Flags);
         if (!res.found_existing) {
             const device = graphics.d3d11.Device.init(pSwapChain) catch return present(pSwapChain, SyncInterval, Flags);
 
@@ -353,32 +364,23 @@ fn ResizeBuffers(
     NewFormat: dxgi.DXGI_FORMAT,
     SwapChainFlags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
-    blk: {
-        instance_map_mu.lock();
-        defer instance_map_mu.unlock();
+    const hook = &zelf.?;
 
-        if (instance_map.fetchRemove(pSwapChain)) |kv| {
-            var ins = kv.value;
-            ins.deinit();
-
-            break :blk;
-        }
-
-        instance_map_mu.unlock();
+    if (hook.instance_map.fetchRemove(pSwapChain)) |kv| {
+        var ins = kv.value;
+        ins.deinit(hook.allocator);
+    } else {
         return resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
     }
 
+    // todo: err handle debug and stuff
     const hr = resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
-
     if (hr == windows.S_OK) {
-        const device = graphics.d3d11.Device.init(pSwapChain) catch {
+        const device = graphics.d3d11.Device.init(pSwapChain) catch return hr;
+        hook.instance_map.put(hook.allocator, pSwapChain, .{ .resources = .empty, .device = device }) catch {
+            device.deinit();
             return hr;
         };
-
-        instance_map_mu.lock();
-        defer instance_map_mu.unlock();
-
-        instance_map.putAssumeCapacity(pSwapChain, .{ .resources = .empty, .device = device });
     }
 
     return hr;
