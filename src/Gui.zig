@@ -16,6 +16,8 @@ const white_pixel: Image = .{
     .data = &.{0xFF},
     .format = .r,
     .id = 0,
+    .modified = .init(0),
+    .usage = .static,
 };
 
 draw_commands: std.ArrayList(shared.DrawCommand),

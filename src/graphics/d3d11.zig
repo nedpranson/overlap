@@ -350,7 +350,7 @@ pub const Device = struct {
         var tex: *d3d11.ID3D11Texture2D = undefined;
         var srv: *d3d11.ID3D11ShaderResourceView = undefined;
 
-        const static = img.modified == 0;
+        const static = img.usage == .static;
 
         const format: windows.INT = switch (img.format) {
             .r => dxgi.DXGI_FORMAT_R8_UNORM,

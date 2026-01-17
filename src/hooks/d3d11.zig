@@ -24,26 +24,28 @@ pub const interface: hooks.Hook = .{
     .uload_image = &unloadImage,
 };
 
-//var mutex: Thread.Mutex = .{};
-
 const Resource = struct {
     tex: *d3d11.ID3D11Texture2D,
     srv: *d3d11.ID3D11ShaderResourceView,
     modified: u16,
+
+    pub fn deinit(res: Resource) void {
+        res.srv.Release();
+        res.tex.Release();
+    }
 };
 
 const Instance = struct {
     device: graphics.d3d11.Device,
 
-    resources: std.AutoHashMapUnmanaged(u32, Resource),
+    resources: SynchronizedHashMap(u32, Resource),
     //unloaded_resources: SynchronizedArrayList(u32),
 
     fn deinit(self: *Instance, allocator: Allocator) void {
         var it = self.resources.valueIterator();
-        while (it.next()) |v| {
-            v.srv.Release();
-            v.tex.Release();
-        }
+        defer it.done();
+
+        while (it.next()) |v| v.deinit();
 
         self.resources.deinit(allocator);
         self.device.deinit();
@@ -237,17 +239,18 @@ pub fn detach() void {
 // and after device render we could try to free some of it
 // can be even called when hook is not active
 pub fn unloadImage(id: u32) void {
-    _ = id;
-    //instance_map_mu.lock();
-    //defer instance_map_mu.unlock();
+    // zelf is not thread safe
+    const hook = &(zelf orelse return);
 
-    //var it = instance_map.valueIterator();
-    //while (it.next()) |ins| {
-        //if (ins.resources.fetchRemove(id)) |kv| {
-            //kv.value.srv.Release();
-            //kv.value.tex.Release();
-        //}
-    //}
+    var it = hook.instance_map.valueIterator();
+    defer it.done();
+
+    while (it.next()) |ins| {
+        // not thread safe still as srv can be needed
+        if (ins.resources.fetchRemove(id)) |res| {
+            res.value.deinit();
+        }
+    }
 }
 
 // todo: need to make this threadsafe!!!
@@ -260,6 +263,7 @@ fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
     const refs = release(pIUnknown);
 
     if (refs == 0) {
+        std.debug.print("Releasing!\n", .{});
         if (hook.instance_map.fetchRemove(@ptrCast(pIUnknown))) |kv| {
             var ins = kv.value;
             ins.deinit(hook.allocator);
@@ -291,8 +295,12 @@ fn requestSRV(ctx: *anyopaque, img: Image) *anyopaque {
     const allocator = zelf.?.allocator;
 
     // todo: handle err
-    // todo: unsafe for multi threading!!!
     const res = ins.resources.getOrPut(allocator, img.id) catch unreachable;
+    defer res.done();
+
+    // img is still not thread safe as pointer can change any time
+    const modified = img.modified.load(.acquire);
+
     if (!res.found_existing) {
         @branchHint(.unlikely);
         const tex, const srv = ins.device.loadImage(img);
@@ -300,12 +308,15 @@ fn requestSRV(ctx: *anyopaque, img: Image) *anyopaque {
         res.value_ptr.* = .{
             .tex = tex,
             .srv = srv,
-            .modified = img.modified,
+            .modified = modified,
         };
     }
 
-    if (res.value_ptr.modified != img.modified) {
-        ins.device.updateImage(res.value_ptr.tex, img);
+    if (img.usage == .dynamic) {
+        if (res.value_ptr.modified != modified) {
+            ins.device.updateImage(res.value_ptr.tex, img);
+            res.value_ptr.modified = modified;
+        }
     }
 
     return res.value_ptr.srv;
@@ -350,6 +361,7 @@ fn Present(
 
     // if errors maybe we should detach d3d11
     // rename to present
+
     ins.device.render(gui.draw_verticies.items, gui.draw_indecies.items, gui.draw_commands.items) catch |err| {
         std.log.err("render failed: {}", .{err});
     };

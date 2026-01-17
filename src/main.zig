@@ -134,8 +134,8 @@ pub fn render(gui: *Gui) void {
 
     // properties
     // todo: handle err
-    ellipsisW(gui, .{ pos[x] + image_size + padding, pos[y] + padding }, context.title, width, .{ .size = 12.0 }) catch unreachable;
-    ellipsisW(gui, .{ pos[x] + image_size + padding, pos[y] + padding + 20.0 }, context.artist, width, .{ .size = 10.0, .color = 0x808080FF }) catch unreachable;
+    //ellipsisW(gui, .{ pos[x] + image_size + padding, pos[y] + padding }, context.title, width, .{ .size = 12.0 }) catch unreachable;
+    //ellipsisW(gui, .{ pos[x] + image_size + padding, pos[y] + padding + 20.0 }, context.artist, width, .{ .size = 10.0, .color = 0x808080FF }) catch unreachable;
 }
 
 fn ellipsisW(gui: *Gui, pos: [2]f32, msg: []const u16, width: f32, descriptor: Gui.Descriptor) !void {

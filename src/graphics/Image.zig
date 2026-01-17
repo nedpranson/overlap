@@ -6,6 +6,10 @@ const math = std.math;
 const Mutex = std.Thread.Mutex;
 const assert = std.debug.assert;
 
+// we need to make images
+// inside memory
+// todo: make image on the heap and only clean it self when ref is at 0
+
 const Image = @This();
 
 pub const Format = enum(u4) {
@@ -22,13 +26,12 @@ width: u32,
 height: u32,
 
 data: [*]const u8, // can change if dynamic
+modified: atomic.Value(u16), // can change if dynamic
 
 id: u32,
-modified: u16 = 0, // can change if dynamic
 
 format: Format,
-
-// mu: Mutex = .{},
+usage: Usage,
 
 pub const Desc = struct {
     width: u32,
@@ -37,11 +40,6 @@ pub const Desc = struct {
     format: Format,
     usage: Usage = .static,
 };
-
-// todo: Add like a lock here
-// so we could safely get its data and shit
-// i think now we crash only cuz of races
-// with main render and update image
 
 pub fn init(desc: Desc) Image {
     assert(math.mulWide(u32, desc.width, desc.height) * @intFromEnum(desc.format) == desc.data.len);
@@ -52,7 +50,8 @@ pub fn init(desc: Desc) Image {
         .data = desc.data.ptr,
         .format = desc.format,
         .id = generate_id(),
-        .modified = if (desc.usage == .dynamic) 1 else 0, // 0 suppose to mean that this image will never be modified
+        .modified = .init(0),
+        .usage = desc.usage,
     };
 }
 
@@ -65,14 +64,8 @@ pub fn deinit(img: Image) void {
 pub fn update(img: *Image, data: []const u8) void {
     assert(math.mulWide(u32, img.width, img.height) * @intFromEnum(img.format) == data.len);
 
-    //img.mu.lock();
-    //defer img.mu.unlock();
-
-    assert(img.modified > 0);
-
-    // todo: add thread safety here!!!!
     img.data = data.ptr;
-    img.modified +%= 1;
+    _ = img.modified.fetchAdd(1, .release);
 }
 
 // Thread-safe
