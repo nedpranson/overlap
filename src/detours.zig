@@ -69,7 +69,7 @@ pub fn Attach(comptime Detour: anytype, ppPointer: **@TypeOf(Detour)) AttachErro
     return switch (win_err) {
         .SUCCESS => {},
         .INVALID_BLOCK => error.FunctionTooSmall,
-        .INVALID_HANDLE => unreachable,
+        .INVALID_HANDLE => unreachable, // can happen if undefined is passed!
         @as(Win32Error, @enumFromInt(4317)) => return error.NoPendingTransaction, // ERROR_INVALID_OPERATION
         .NOT_ENOUGH_MEMORY => error.OutOfMemory,
         else => |e| return windows.unexpectedError(e),

@@ -150,6 +150,7 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
 
     var failure = true;
 
+    release = @ptrCast(@constCast(swap_chain.vtable[2]));
     present = @ptrCast(@constCast(swap_chain.vtable[8]));
     resize_buffers = @ptrCast(@constCast(swap_chain.vtable[13]));
 
