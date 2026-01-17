@@ -155,6 +155,7 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
     resize_buffers = @ptrCast(@constCast(swap_chain.vtable[13]));
 
     defer if (failure) {
+        release = undefined;
         present = undefined;
         resize_buffers = undefined;
     };
@@ -202,6 +203,7 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
 pub fn detach() void {
     const hook = &zelf.?;
 
+    defer release = undefined;
     defer present = undefined;
     defer resize_buffers = undefined;
 
