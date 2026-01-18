@@ -1,10 +1,7 @@
 const std = @import("std");
 const windows = @import("windows.zig");
-const graphics = @import("graphics.zig");
 const d3d11 = @import("hooks/d3d11.zig");
 const detours = @import("detours.zig");
-const Gui = @import("Gui.zig");
-const Image = @import("graphics/Image.zig");
 
 const mem = std.mem;
 const unicode = std.unicode;
@@ -13,23 +10,44 @@ const Mutex = std.Thread.Mutex;
 const Allocator = mem.Allocator;
 const assert = std.debug.assert;
 
-var mutex: Mutex = .{};
+var hook_mu: Mutex = .{};
+var allocator: Allocator = undefined;
 
 var load_library_a: *@TypeOf(LoadLibraryA) = undefined;
 var load_library_w: *@TypeOf(LoadLibraryW) = undefined;
 
 var hooked = false;
 
-pub const hooks = [_]Hook{d3d11.interface};
-
-pub const Hook = struct {
-    attach: *const fn (gpa: Allocator, lib: windows.HMODULE) bool,
-    detach: *const fn () void,
-    uload_image: *const fn (id: u32) void,
+pub const hooks = [_]Hook{
+    d3d11.interface,
 };
 
-pub fn init(allocator: Allocator) bool {
-    _ = allocator;
+pub const Hook = struct {
+    module_a: [:0]const u8,
+    module_w: [:0]const u16,
+
+    attach: *const fn (allocator: Allocator, lib: windows.HMODULE) bool,
+    detach: *const fn () void,
+    active: *const fn () bool,
+
+    pub const Descriptor = struct {
+        attach: *const fn (allocator: Allocator, lib: windows.HMODULE) bool,
+        detach: *const fn () void,
+        active: *const fn () bool,
+    };
+
+    pub fn define(comptime module: [:0]const u8, desc: Descriptor) Hook {
+        return .{
+            .module_a = module,
+            .module_w = unicode.wtf8ToWtf16LeStringLiteral(module),
+            .attach = desc.attach,
+            .detach = desc.detach,
+            .active = desc.active,
+        };
+    }
+};
+
+pub fn init(gpa: Allocator) bool {
     assert(hooked == false);
 
     var failure = true;
@@ -43,6 +61,8 @@ pub fn init(allocator: Allocator) bool {
         load_library_a = undefined;
         load_library_w = undefined;
     };
+
+    allocator = gpa;
 
     if (windows.GetProcAddress(kernel32, "LoadLibraryA")) |proc| {
         load_library_a = @ptrCast(proc);
@@ -74,13 +94,15 @@ pub fn init(allocator: Allocator) bool {
         log.err("LoadLibraryW: cannot detach: {}", .{err});
     };
 
-    mutex.lock();
-    defer mutex.unlock();
+    hook_mu.lock();
+    defer hook_mu.unlock();
 
-    //if (windows.GetModuleHandle("d3d11.dll")) |mod| {
-        // TODO: Unsafe
-        //_ = d3d11.attach(std.heap.page_allocator, mod);
-    //}
+    for (hooks) |hook| {
+        const mod = windows.GetModuleHandle(hook.module_a) orelse continue;
+        if (!hook.attach(allocator, mod)) {
+            log.warn("{s}: failed to hook", .{hook.module_a});
+        }
+    }
 
     failure = false;
     hooked = true;
@@ -106,21 +128,28 @@ pub fn deinit() void {
         log.err("LoadLibraryW: cannot detach: {}", .{err});
     }
 
-    //if (d3d11.active()) {
-        //d3d11.detach();
-    //}
+    for (hooks) |hook| {
+        if (!hook.active()) continue;
+        hook.detach();
+    }
+
+    allocator = undefined;
 }
 
 fn LoadLibraryA(lpLibFileName: windows.LPCSTR) callconv(.winapi) ?windows.HMODULE {
     const lib = load_library_a(lpLibFileName) orelse return null;
     const lib_name = mem.span(lpLibFileName);
 
-    if (mem.eql(u8, lib_name, "d3d11.dll")) {
-        mutex.lock();
-        defer mutex.unlock();
+    hook_mu.lock();
+    defer hook_mu.unlock();
 
-        // TODO: Unsafe
-        //_ = d3d11.attach(std.heap.page_allocator, lib);
+    for (hooks) |hook| {
+        if (!hook.active()) continue;
+        if (!mem.eql(u8, lib_name, hook.module_a)) continue;
+
+        if (!hook.attach(allocator, lib)) {
+            log.warn("{s}: failed to hook", .{hook.module_a});
+        }
     }
 
     return lib;
@@ -130,12 +159,16 @@ fn LoadLibraryW(lpLibFileName: windows.LPCWSTR) callconv(.winapi) ?windows.HMODU
     const lib = load_library_w(lpLibFileName) orelse return null;
     const lib_name = mem.span(lpLibFileName);
 
-    if (mem.eql(u16, lib_name, unicode.wtf8ToWtf16LeStringLiteral("d3d11.dll"))) {
-        mutex.lock();
-        defer mutex.unlock();
+    hook_mu.lock();
+    defer hook_mu.unlock();
 
-        // TODO: Unsafe
-        //_ = d3d11.attach(std.heap.page_allocator, lib);
+    for (hooks) |hook| {
+        if (!hook.active()) continue;
+        if (!mem.eql(u16, lib_name, hook.module_w)) continue;
+
+        if (!hook.attach(allocator, lib)) {
+            log.warn("{s}: failed to hook", .{hook.module_a});
+        }
     }
 
     return lib;

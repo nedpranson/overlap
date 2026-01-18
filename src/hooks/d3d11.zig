@@ -14,15 +14,16 @@ const SynchronizedArrayList = @import("../util.zig").SynchronizedArrayList;
 const d3d11 = windows.d3d11;
 const dxgi = windows.dxgi;
 const d3dcommon = windows.d3dcommon;
+const log = std.log.scoped(.d3d11);
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
 const assert = std.debug.assert;
 
-pub const interface: hooks.Hook = .{
+pub const interface: hooks.Hook = .define("d3d11.dll", .{
     .attach = &attach,
     .detach = &detach,
-    .uload_image = &unloadImage,
-};
+    .active = &active,
+});
 
 const Resource = struct {
     tex: *d3d11.ID3D11Texture2D,
@@ -66,13 +67,13 @@ var present: *@TypeOf(Present) = undefined;
 var resize_buffers: *@TypeOf(ResizeBuffers) = undefined;
 
 // todo: make it global or sum
-var fr: @import("../graphics/FontRenderer.zig") = undefined;
+// var fr: @import("../graphics/FontRenderer.zig") = undefined;
 
 pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
     assert(zelf == null);
 
     // todo: implement valid global! font renderer
-    fr = @import("../graphics/FontRenderer.zig").init(std.heap.page_allocator) catch return false;
+    //fr = @import("../graphics/FontRenderer.zig").init(std.heap.page_allocator) catch return false;
 
     windows.AllocConsole() catch {};
 
@@ -90,7 +91,7 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
         null,
         null,
     ) catch |err| {
-        std.log.err("d3d11: could not make dummy window: {}", .{err});
+        log.err("could not make dummy window: {}", .{err});
         return false;
     };
     defer windows.DestroyWindow(window);
@@ -100,7 +101,7 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
         d3d11_lib,
         "D3D11CreateDeviceAndSwapChain",
     ) catch |err| {
-        std.log.err("d3d11: D3D11CreateDeviceAndSwapChain: failed to get proc address: {}", .{err});
+        log.err("D3D11CreateDeviceAndSwapChain: failed to get proc address: {}", .{err});
         return false;
     });
 
@@ -141,7 +142,7 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
     switch (d3d11.D3D11_ERROR_CODE(hr)) {
         .S_OK => {},
         else => |err| {
-            std.log.err("d3d11: D3D11CreateDeviceAndSwapChain failed: {}", .{d3d11.unexpectedError(err)});
+            log.err("D3D11CreateDeviceAndSwapChain failed: {}", .{d3d11.unexpectedError(err)});
             return false;
         },
     }
@@ -162,34 +163,34 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
         resize_buffers = undefined;
     };
 
-    //detours.attach(Release, &release) catch |err| {
-        //std.log.err("d3d11: Release: failed to attach: {}", .{err});
-        //return false;
-    //};
-    //std.log.info("d3d11: Release: successfully attached", .{});
+    detours.attach(Release, &release) catch |err| {
+        log.err("Release: failed to attach: {}", .{err});
+        return false;
+    };
+    log.info("Release: successfully attached", .{});
 
     defer if (failure) detours.detach(Release, &release) catch |err| {
-        std.log.err("d3d11: Release: cannot detach: {}", .{err});
+        log.err("Release: cannot detach: {}", .{err});
     };
 
     detours.attach(Present, &present) catch |err| {
-        std.log.err("d3d11: Present: failed to attach: {}", .{err});
+        log.err("Present: failed to attach: {}", .{err});
         return false;
     };
-    std.log.info("d3d11: Present: successfully attached", .{});
+    log.info("Present: successfully attached", .{});
 
     defer if (failure) detours.detach(Present, &present) catch |err| {
-        std.log.err("d3d11: Present: cannot detach: {}", .{err});
+        log.err("Present: cannot detach: {}", .{err});
     };
 
     detours.attach(ResizeBuffers, &resize_buffers) catch |err| {
-        std.log.err("d3d11: ResizeBuffers: failed to attach: {}", .{err});
+        log.err("ResizeBuffers: failed to attach: {}", .{err});
         return false;
     };
-    std.log.info("d3d11: ResizeBuffers: successfully attached", .{});
+    log.info("ResizeBuffers: successfully attached", .{});
 
     defer if (failure) detours.detach(ResizeBuffers, &resize_buffers) catch |err| {
-        std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
+        log.err("ResizeBuffers: cannot detach: {}", .{err});
     };
 
     failure = false;
@@ -209,27 +210,32 @@ pub fn detach() void {
     defer present = undefined;
     defer resize_buffers = undefined;
 
-    //detours.detach(Release, &release) catch |err| {
-        //std.log.err("d3d11: Release: cannot detach: {}", .{err});
-    //};
+    if (detours.detach(Release, &release)) {
+        log.info("Release: successfully detached", .{});
+    } else |err| {
+        log.err("Release: cannot detach: {}", .{err});
+    }
 
-    detours.detach(Present, &present) catch |err| {
-        std.log.err("d3d11: Present: cannot detach: {}", .{err});
-    };
+    if (detours.detach(Present, &present)) {
+        log.info("Present: successfully detached", .{});
+    } else |err| {
+        log.err("Present: cannot detach: {}", .{err});
+    }
 
-    detours.detach(ResizeBuffers, &resize_buffers) catch |err| {
-        std.log.err("d3d11: ResizeBuffers: cannot detach: {}", .{err});
-    };
+    if (detours.detach(ResizeBuffers, &resize_buffers)) {
+        log.info("ResizeBuffers: successfully detached", .{});
+    } else |err| {
+        log.err("ResizeBuffers: cannot detach: {}", .{err});
+    }
 
-    var it = hook.instance_map.valueIterator();
-    defer it.done(); // todo: idk remove this no need to sync here
-
+    var it = hook.instance_map.map.valueIterator();
     while (it.next()) |ins| {
         ins.deinit(hook.allocator);
     }
 
     hook.instance_map.deinit(hook.allocator);
 
+    windows.FreeConsole() catch {};
     zelf = null;
 }
 
@@ -261,6 +267,8 @@ pub fn active() bool {
 fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
     //const hook = &zelf.?;
     const refs = release(pIUnknown);
+
+    std.debug.print("Release called: {}\n", .{refs});
 
     //if (refs == 0) {
         //std.debug.print("Releasing!\n", .{});
@@ -331,32 +339,32 @@ fn Present(
     SyncInterval: windows.UINT,
     Flags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
-    const hook = &zelf.?;
-    const ins = blk: {
-        const res = hook.instance_map.getOrPut(hook.allocator, pSwapChain) catch return present(pSwapChain, SyncInterval, Flags);
-        defer res.done();
+    //const hook = &zelf.?;
+    //const ins = blk: {
+        //const res = hook.instance_map.getOrPut(hook.allocator, pSwapChain) catch return present(pSwapChain, SyncInterval, Flags);
+        //defer res.done();
 
-        if (!res.found_existing) {
-            const device = graphics.d3d11.Device.init(pSwapChain) catch return present(pSwapChain, SyncInterval, Flags);
+        //if (!res.found_existing) {
+            //const device = graphics.d3d11.Device.init(pSwapChain) catch return present(pSwapChain, SyncInterval, Flags);
 
-            res.value_ptr.* = .{
-                .resources = .empty,
-                .device = device,
-            };
-        }
+            //res.value_ptr.* = .{
+                //.resources = .empty,
+                //.device = device,
+            //};
+        //}
 
-        break :blk res.value_ptr;
-    };
+        //break :blk res.value_ptr;
+    //};
 
-    var gui: Gui = .init(
-        &draw_commands,
-        &draw_verticies,
-        &draw_indicies,
-        &fr,
-        ins,
-        &requestSRV,
-    );
-    renderer.render(&gui);
+    //var gui: Gui = .init(
+        //&draw_commands,
+        //&draw_verticies,
+        //&draw_indicies,
+        //&fr,
+        //ins,
+        //&requestSRV,
+    //);
+    //renderer.render(&gui);
 
     // todo: fix this race
     // image can be unloaded when in render
@@ -366,9 +374,9 @@ fn Present(
     // if errors maybe we should detach d3d11
     // rename to present
 
-    ins.device.render(gui.draw_verticies.items, gui.draw_indecies.items, gui.draw_commands.items) catch |err| {
-        std.log.err("render failed: {}", .{err});
-    };
+    //ins.device.render(gui.draw_verticies.items, gui.draw_indecies.items, gui.draw_commands.items) catch |err| {
+        //log.err("render failed: {}", .{err});
+    //};
 
     // perhaps here release all the resources we dont need, like srv ones
 
@@ -383,24 +391,24 @@ fn ResizeBuffers(
     NewFormat: dxgi.DXGI_FORMAT,
     SwapChainFlags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
-    const hook = &zelf.?;
+    //const hook = &zelf.?;
 
-    if (hook.instance_map.fetchRemove(pSwapChain)) |kv| {
-        var ins = kv.value;
-        ins.deinit(hook.allocator);
-    } else {
-        return resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
-    }
+    //if (hook.instance_map.fetchRemove(pSwapChain)) |kv| {
+        //var ins = kv.value;
+        //ins.deinit(hook.allocator);
+    //} else {
+        //return resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+    //}
 
     // todo: err handle debug and stuff
     const hr = resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
-    if (hr == windows.S_OK) {
-        const device = graphics.d3d11.Device.init(pSwapChain) catch return hr;
-        hook.instance_map.put(hook.allocator, pSwapChain, .{ .resources = .empty, .device = device }) catch {
-            device.deinit();
-            return hr;
-        };
-    }
+    //if (hr == windows.S_OK) {
+        //const device = graphics.d3d11.Device.init(pSwapChain) catch return hr;
+        //hook.instance_map.put(hook.allocator, pSwapChain, .{ .resources = .empty, .device = device }) catch {
+            //device.deinit();
+            //return hr;
+        //};
+    //}
 
     return hr;
 }
