@@ -14,6 +14,7 @@ const State = enum(u8) {
 var state: atomic.Value(State) = .init(.uninitialized);
 
 fn setup() bool {
+    // todo: format error message!
     main.setup() catch |err| {
         std.log.err("{}", .{err});
         return false;

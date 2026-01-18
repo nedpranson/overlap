@@ -33,11 +33,13 @@ var context: Context = .{};
 
 var token: i64 = undefined;
 
+// RoInitialize and RoUninitialize needs to be called from the same thread
+// temp fix is i just dont call it
 pub fn setup() !void {
     const allocator = gpa.allocator();
 
-    try windows.RoInitialize(windows.RO_INIT_MULTITHREADED);
-    errdefer windows.RoUninitialize();
+    //try windows.RoInitialize(windows.RO_INIT_MULTITHREADED);
+    //errdefer windows.RoUninitialize();
 
     manager = try (try windows.GlobalSystemMediaTransportControlsSessionManager.RequestAsync()).getAndForget(allocator);
     errdefer manager.Release();
@@ -63,7 +65,7 @@ pub fn cleanup() void {
     manager.RemoveCurrentSessionChanged(token) catch unreachable;
     manager.Release();
 
-    windows.RoUninitialize();
+    // windows.RoUninitialize();
 
     _ = gpa.deinit();
 }
