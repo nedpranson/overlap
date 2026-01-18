@@ -6,12 +6,12 @@ const renderer = @import("renderer.zig");
 const atomic = std.atomic;
 
 fn setup() bool {
-    std.log.info("attaching overlay hooks");
+    std.log.info("attaching overlay hooks", .{});
     return hooks.init();
 }
 
 fn cleanup() void {
-    std.log.info("deattaching overlay hooks");
+    std.log.info("deattaching overlay hooks", .{});
     renderer.cleanup();
     hooks.deinit();
 }
