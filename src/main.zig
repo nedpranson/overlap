@@ -1,7 +1,7 @@
 const std = @import("std");
 const windows = @import("windows.zig");
 const Gui = @import("Gui.zig");
-const Image = @import("graphics/Image.zig");
+//const Image = @import("graphics/Image.zig");
 
 const unicode = std.unicode;
 const mem = std.mem;
@@ -16,7 +16,7 @@ const Context = struct {
     title: []const u16 = &.{},
     artist: []const u16 = &.{},
 
-    cover: ?*Image = null,
+    //cover: ?*Image = null,
 
     timeline: struct {
         last_updated: i64 = 0,
@@ -49,9 +49,9 @@ pub fn setup() !void {
 }
 
 pub fn cleanup() void {
-    if (context.cover) |cov| {
-        cov.deinit();
-    }
+    //if (context.cover) |cov| {
+        //cov.deinit();
+    //}
 
     if (context.session) |session| {
         session.Release();
@@ -95,12 +95,11 @@ pub fn render(gui: *Gui) void {
     gui.rect(.{ -1.0 + pos[x], -1.0 + pos[y] }, .{ pos[x] + image_size + padding + width + padding + 1.0, pos[y] + image_size + 1.0 }, 0x202E36FF);
     gui.rect(.{ pos[x], pos[y] }, .{ pos[x] + image_size + padding + width + padding, pos[y] + image_size }, 0x10191EFF);
 
-
-    context.mutex.lock();
-    if (context.cover) |cov| {
-        gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, cov);
-    }
-    context.mutex.unlock();
+    //context.mutex.lock();
+    //if (context.cover) |cov| {
+        //gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, cov);
+    //}
+    //context.mutex.unlock();
 
     // cover
 
@@ -252,21 +251,21 @@ pub fn propartiesChanged(_: void, session: windows.GlobalSystemMediaTransportCon
     context.mutex.lock();
     defer context.mutex.unlock();
 
-    if (context.cover) |cov| {
-        cov.deinit();
-        context.cover = null;
-    }
+    //if (context.cover) |cov| {
+        //cov.deinit();
+        //context.cover = null;
+    //}
 
-    var ptr: [*]const u8 = undefined;
-    var len: u32 = undefined;
-    pixels.DetachPixelData(&len, &ptr); // todo: add PixelDataProvider
+    //var ptr: [*]const u8 = undefined;
+    //var len: u32 = undefined;
+    //pixels.DetachPixelData(&len, &ptr); // todo: add PixelDataProvider
 
-    context.cover = try .init(gpa.allocator(), .{
-        .width = 64,
-        .height = 64,
-        .data = ptr[0..len],
-        .format = .rgba,
-    });
+    //context.cover = try .init(gpa.allocator(), .{
+        //.width = 64,
+        //.height = 64,
+        //.data = ptr[0..len],
+        //.format = .rgba,
+    //});
 
     gpa.allocator().free(context.title);
     gpa.allocator().free(context.artist);
