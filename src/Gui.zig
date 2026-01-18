@@ -10,13 +10,16 @@ const Gui = @This();
 const x = 0;
 const y = 1;
 
-const white_pixel: Image = .{
+var pixel = [1]u8{0xFF};
+var white_pixel: Image = .{
     .width = 1,
     .height = 1,
-    .data = &.{0xFF},
+    .data = &pixel,
     .format = .r,
-    .id = 0,
-    .modified = .init(0),
+    .gpa = undefined,
+    .ref_count = .init(1),
+    .mu = .{},
+    .modified = 0,
     .usage = .static,
 };
 
@@ -28,7 +31,7 @@ draw_indecies: std.ArrayList(shared.DrawIndex),
 font_renderer: *FontRenderer,
 
 ctx: *anyopaque,
-request_srv: *const fn(ctx: *anyopaque, img: Image) *anyopaque,
+request_srv: *const fn(ctx: *anyopaque, img: *Image) *anyopaque,
 
 pub fn init(
     draw_commands: []shared.DrawCommand,
@@ -36,7 +39,7 @@ pub fn init(
     draw_indecies: []shared.DrawIndex,
     font_renderer: *FontRenderer,
     ctx: *anyopaque,
-    request_srv: *const fn(ctx: *anyopaque, img: Image) *anyopaque,
+    request_srv: *const fn(ctx: *anyopaque, img: *Image) *anyopaque,
 ) Gui {
     return .{
         .draw_commands = .initBuffer(draw_commands),
@@ -64,11 +67,11 @@ pub fn rect(gui: *Gui, top: [2]f32, bot: [2]f32, col: u32) void {
     gui.addDrawCommand(.{
         .verticies = &verticies,
         .indecies = &indecies,
-        .image = gui.request_srv(gui.ctx, white_pixel),
+        .image = gui.request_srv(gui.ctx, &white_pixel),
     });
 }
 
-pub fn image(gui: *Gui, top: [2]f32, bot: [2]f32, img: Image) void {
+pub fn image(gui: *Gui, top: [2]f32, bot: [2]f32, img: *Image) void {
     const flags: u8 = @intFromEnum(img.format);
     const verticies = [4]shared.DrawVertex{
         .{ .pos = .{ top[x], top[y] }, .uv = .{ 0.0, 0.0 }, .col = 0xFFFFFFFF, .flags = flags },

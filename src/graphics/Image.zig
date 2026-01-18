@@ -1,18 +1,12 @@
 const std = @import("std");
-const hooks = @import("../hooks.zig");
-
-const atomic = std.atomic;
 const math = std.math;
-const Mutex = std.Thread.Mutex;
+const atomic = std.atomic;
+
+const Allocator = std.mem.Allocator;
+const Thread = std.Thread;
 const assert = std.debug.assert;
 
-// we need to make images
-// inside memory
-// todo: make image on the heap and only clean it self when ref is at 0
-
-const Image = @This();
-
-pub const Format = enum(u4) {
+pub const Format = enum(u3) {
     r = 1,
     rgba = 4,
 };
@@ -22,18 +16,9 @@ pub const Usage = enum(u1) {
     dynamic,
 };
 
-width: u32,
-height: u32,
+const Image = @This();
 
-data: [*]const u8, // can change if dynamic
-modified: atomic.Value(u16), // can change if dynamic
-
-id: u32,
-
-format: Format,
-usage: Usage,
-
-pub const Desc = struct {
+pub const Descriptor = struct {
     width: u32,
     height: u32,
     data: []const u8,
@@ -41,39 +26,78 @@ pub const Desc = struct {
     usage: Usage = .static,
 };
 
-pub fn init(desc: Desc) Image {
+// todo: we could make Image an interface
+// that would like have Dynamic or Static variants
+
+gpa: Allocator,
+
+width: u32,
+height: u32,
+
+ref_count: atomic.Value(u32),
+
+data: [*]u8,
+modified: u16, // only dynamic uses this
+
+mu: Thread.Mutex, // only dynamic uses this
+
+format: Format,
+usage: Usage,
+
+pub fn init(gpa: Allocator, desc: Descriptor) Allocator.Error!*Image {
     assert(math.mulWide(u32, desc.width, desc.height) * @intFromEnum(desc.format) == desc.data.len);
 
-    return .{
+    const copy = try gpa.dupe(u8, desc.data);
+    errdefer gpa.free(copy);
+
+    const img = try gpa.create(Image);
+    errdefer gpa.destroy(img);
+
+    img.* = .{
+        .gpa = gpa,
         .width = desc.width,
         .height = desc.height,
-        .data = desc.data.ptr,
+        .ref_count = .init(1),
+        .data = copy.ptr,
+        .modified = 0,
+        .mu = .{},
         .format = desc.format,
-        .id = generate_id(),
-        .modified = .init(0),
         .usage = desc.usage,
     };
+
+    return img;
+
 }
 
-pub fn deinit(img: Image) void {
-    for (hooks.hooks) |hook| {
-        hook.uload_image(img.id);
-    }
+pub inline fn deinit(img: *Image) void {
+    decRef(img);
 }
 
 pub fn update(img: *Image, data: []const u8) void {
     assert(math.mulWide(u32, img.width, img.height) * @intFromEnum(img.format) == data.len);
 
-    img.data = data.ptr;
-    _ = img.modified.fetchAdd(1, .release);
+    img.mu.lock();
+    defer img.mu.unlock();
+
+    @memcpy(img.data[0..img.width * img.height], data);
+    img.modified += 1;
 }
 
-// Thread-safe
-fn generate_id() u32 {
-    const static = struct {
-        // set to one as zero is 1x1 white image pixel id (default)
-        var id: atomic.Value(u32) = .init(1);
-    };
+pub fn addRef(img: *Image) void {
+    assert(img.ref_count.fetchAdd(1, .monotonic) != 0);
+}
 
-    return static.id.fetchAdd(1, .monotonic);
+pub fn decRef(img: *Image) void {
+    const prev_count = img.ref_count.fetchSub(1, .release);
+    assert(prev_count != 0);
+
+    if (prev_count == 1) {
+        _ = img.ref_count.load(.acquire);
+
+        // todo: boadcast!
+        std.debug.print("freeing the image!!\n", .{});
+
+        img.gpa.free(img.data[0..img.width * img.height]);
+        img.gpa.destroy(img);
+    }
 }

@@ -346,7 +346,7 @@ pub const Device = struct {
         }
     }
 
-    pub fn loadImage(device: *const Device, img: Image) struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView } {
+    pub fn loadImage(device: *const Device, img: *const Image) struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView } {
         var tex: *d3d11.ID3D11Texture2D = undefined;
         var srv: *d3d11.ID3D11ShaderResourceView = undefined;
 
@@ -402,7 +402,7 @@ pub const Device = struct {
         return .{ tex, srv };
     }
 
-    pub fn updateImage(device: *const Device, tex: *d3d11.ID3D11Texture2D, img: Image) void {
+    pub fn updateImage(device: *const Device, tex: *d3d11.ID3D11Texture2D, img: *const Image) void {
         var mapped_resource: d3d11.D3D11_MAPPED_SUBRESOURCE = undefined;
 
         // todo: catch errors

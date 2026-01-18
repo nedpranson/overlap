@@ -16,10 +16,7 @@ const Context = struct {
     title: []const u16 = &.{},
     artist: []const u16 = &.{},
 
-    cover: ?struct {
-        img: Image,
-        pixels: *windows.IPixelDataProvider,
-    } = null,
+    cover: ?*Image = null,
 
     timeline: struct {
         last_updated: i64 = 0,
@@ -52,7 +49,10 @@ pub fn setup() !void {
 }
 
 pub fn cleanup() void {
-    // todo: release context cover img
+    if (context.cover) |cov| {
+        cov.deinit();
+    }
+
     if (context.session) |session| {
         session.Release();
     }
@@ -68,9 +68,12 @@ pub fn cleanup() void {
     _ = gpa.deinit();
 }
 
-// now how can we make images indipendent?
-// so same rendering code would work for d3d11, opengl, vulkan
+// this function can be called from any thread
+// or from the same thread with 2 diffrent backends
+// multi backend is suck a brainfuck
 pub fn render(gui: *Gui) void {
+    // add ref to all image objects!!!!!!
+
     const session = blk: {
         context.mutex.lock();
         defer context.mutex.unlock();
@@ -95,7 +98,7 @@ pub fn render(gui: *Gui) void {
 
     context.mutex.lock();
     if (context.cover) |cov| {
-        gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, cov.img);
+        gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, cov);
     }
     context.mutex.unlock();
 
@@ -244,29 +247,26 @@ pub fn propartiesChanged(_: void, session: windows.GlobalSystemMediaTransportCon
         windows.ExifOrientationMode_IgnoreExifOrientation,
         windows.ColorManagementMode_DoNotColorManage,
     )).getAndForget(gpa.allocator());
-    errdefer pixels.Release();
+    defer pixels.Release();
 
     context.mutex.lock();
     defer context.mutex.unlock();
 
     if (context.cover) |cov| {
-        cov.img.deinit();
-        cov.pixels.Release();
+        cov.deinit();
+        context.cover = null;
     }
 
     var ptr: [*]const u8 = undefined;
     var len: u32 = undefined;
     pixels.DetachPixelData(&len, &ptr); // todo: add PixelDataProvider
 
-    context.cover = .{
-        .img = .init(.{
-            .width = 64,
-            .height = 64,
-            .data = ptr[0..len],
-            .format = .rgba,
-        }),
-        .pixels = pixels,
-    };
+    context.cover = try .init(gpa.allocator(), .{
+        .width = 64,
+        .height = 64,
+        .data = ptr[0..len],
+        .format = .rgba,
+    });
 
     gpa.allocator().free(context.title);
     gpa.allocator().free(context.artist);

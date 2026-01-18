@@ -10,7 +10,7 @@ const assert = std.debug.assert;
 
 allocator: Allocator,
 
-image: Image,
+image: *Image,
 
 data: []u8,
 size: u32,
@@ -44,7 +44,7 @@ pub fn init(allocator: Allocator, size: u32) !Atlas {
 
     var self: Atlas = .{
         .allocator = allocator,
-        .image = .init(.{
+        .image = try .init(allocator, .{
             .width = size,
             .height = size,
             .data = data,

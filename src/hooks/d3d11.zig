@@ -38,7 +38,7 @@ const Resource = struct {
 const Instance = struct {
     device: graphics.d3d11.Device,
 
-    resources: SynchronizedHashMap(u32, Resource),
+    resources: SynchronizedHashMap(*const Image, Resource),
     //unloaded_resources: SynchronizedArrayList(u32),
 
     fn deinit(self: *Instance, allocator: Allocator) void {
@@ -290,17 +290,18 @@ const ImageCache = struct {
     modified: u16,
 };
 
-fn requestSRV(ctx: *anyopaque, img: Image) *anyopaque {
+fn requestSRV(ctx: *anyopaque, img: *Image) *anyopaque {
     const ins: *Instance = @ptrCast(@alignCast(ctx));
     const allocator = zelf.?.allocator;
 
+    img.mu.lock();
+    defer img.mu.unlock();
+
     // todo: handle err
-    const res = ins.resources.getOrPut(allocator, img.id) catch unreachable;
+    const res = ins.resources.getOrPut(allocator, img) catch unreachable;
     defer res.done();
 
     // img is still not thread safe as pointer can change any time
-    const modified = img.modified.load(.acquire);
-
     if (!res.found_existing) {
         @branchHint(.unlikely);
         const tex, const srv = ins.device.loadImage(img);
@@ -308,14 +309,14 @@ fn requestSRV(ctx: *anyopaque, img: Image) *anyopaque {
         res.value_ptr.* = .{
             .tex = tex,
             .srv = srv,
-            .modified = modified,
+            .modified = img.modified,
         };
     }
 
     if (img.usage == .dynamic) {
-        if (res.value_ptr.modified != modified) {
+        if (res.value_ptr.modified != img.modified) {
             ins.device.updateImage(res.value_ptr.tex, img);
-            res.value_ptr.modified = modified;
+            res.value_ptr.modified = img.modified;
         }
     }
 
