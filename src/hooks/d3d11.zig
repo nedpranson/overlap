@@ -162,11 +162,11 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
         resize_buffers = undefined;
     };
 
-    detours.attach(Release, &release) catch |err| {
-        std.log.err("d3d11: Release: failed to attach: {}", .{err});
-        return false;
-    };
-    std.log.info("d3d11: Release: successfully attached", .{});
+    //detours.attach(Release, &release) catch |err| {
+        //std.log.err("d3d11: Release: failed to attach: {}", .{err});
+        //return false;
+    //};
+    //std.log.info("d3d11: Release: successfully attached", .{});
 
     defer if (failure) detours.detach(Release, &release) catch |err| {
         std.log.err("d3d11: Release: cannot detach: {}", .{err});
@@ -209,9 +209,9 @@ pub fn detach() void {
     defer present = undefined;
     defer resize_buffers = undefined;
 
-    detours.detach(Release, &release) catch |err| {
-        std.log.err("d3d11: Release: cannot detach: {}", .{err});
-    };
+    //detours.detach(Release, &release) catch |err| {
+        //std.log.err("d3d11: Release: cannot detach: {}", .{err});
+    //};
 
     detours.detach(Present, &present) catch |err| {
         std.log.err("d3d11: Present: cannot detach: {}", .{err});
