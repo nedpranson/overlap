@@ -144,7 +144,7 @@ fn LoadLibraryA(lpLibFileName: windows.LPCSTR) callconv(.winapi) ?windows.HMODUL
     defer hook_mu.unlock();
 
     for (hooks) |hook| {
-        if (!hook.active()) continue;
+        if (hook.active()) continue;
         if (!mem.eql(u8, lib_name, hook.module_a)) continue;
 
         if (!hook.attach(allocator, lib)) {
@@ -163,7 +163,7 @@ fn LoadLibraryW(lpLibFileName: windows.LPCWSTR) callconv(.winapi) ?windows.HMODU
     defer hook_mu.unlock();
 
     for (hooks) |hook| {
-        if (!hook.active()) continue;
+        if (hook.active()) continue;
         if (!mem.eql(u16, lib_name, hook.module_w)) continue;
 
         if (!hook.attach(allocator, lib)) {
