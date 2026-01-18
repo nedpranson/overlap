@@ -368,7 +368,7 @@ fn Present(
         //&requestSRV,
     );
 
-    renderer.render(&gui);
+    renderer.render(hook.allocator, &gui);
 
     // todo: on any error we need to unhhok ourselfs
     instance.device.render(gui.draw_verticies.items, gui.draw_indecies.items, gui.draw_commands.items) catch |err| {

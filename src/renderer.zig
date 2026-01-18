@@ -3,6 +3,7 @@ const Gui = @import("Gui.zig");
 const main = @import("main.zig");
 
 const atomic = std.atomic;
+const Allocator = std.mem.Allocator;
 
 const State = enum(u8) {
     initialized,
@@ -13,9 +14,9 @@ const State = enum(u8) {
 
 var state: atomic.Value(State) = .init(.uninitialized);
 
-fn setup() bool {
+fn setup(gpa: Allocator) bool {
     // todo: format error message!
-    main.setup() catch |err| {
+    main.setup(gpa) catch |err| {
         std.log.err("{}", .{err});
         return false;
     };
@@ -32,14 +33,14 @@ pub fn cleanup() void {
     }
 }
 
-pub fn render(gui: *Gui) void {
+pub fn render(gpa: Allocator, gui: *Gui) void {
     while (true) {
         switch (state.load(.acquire)) {
             .initialized => return main.render(gui),
             .initializing => atomic.spinLoopHint(),
             .failure => return,
             .uninitialized => if (state.cmpxchgWeak(.uninitialized, .initializing, .release, .monotonic) == null) {
-                const s: State = if (@call(.always_inline, setup, .{})) .initialized else .failure;
+                const s: State = if (@call(.always_inline, setup, .{gpa})) .initialized else .failure;
                 state.store(s, .release);
             },
         }

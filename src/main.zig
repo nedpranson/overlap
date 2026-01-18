@@ -8,15 +8,24 @@ const mem = std.mem;
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
 
-const Context = struct {
+// todo: Before adding any images let us make this part thread safe 100%
+// now it's rly bad
+
+const Init = struct {
+    gpa: Allocator,
     mutex: Thread.Mutex = .{},
 
+    manager: windows.GlobalSystemMediaTransportControlsSessionManager,
     session: ?windows.GlobalSystemMediaTransportControlsSession = null,
 
-    title: []const u16 = &.{},
-    artist: []const u16 = &.{},
+    title: []u16 = &.{},
+    artist: []u16 = &.{},
 
-    //cover: ?*Image = null,
+    tokens: struct {
+        session_changed: ?i64 = null,
+        timeline_changed: ?i64 = null,
+        proparties_changed: ?i64 = null,
+    } = .{},
 
     timeline: struct {
         last_updated: i64 = 0,
@@ -25,62 +34,46 @@ const Context = struct {
     } = .{},
 };
 
-// this undefined stuff sucks
-var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
-
-var manager: windows.GlobalSystemMediaTransportControlsSessionManager = undefined;
-var context: Context = .{};
-
-var token: i64 = undefined;
+var init: Init = undefined;
 
 // RoInitialize and RoUninitialize needs to be called from the same thread
 // temp fix is i just dont call it
-pub fn setup() !void {
-    const allocator = gpa.allocator();
-
-    //try windows.RoInitialize(windows.RO_INIT_MULTITHREADED);
-    //errdefer windows.RoUninitialize();
-
-    manager = try (try windows.GlobalSystemMediaTransportControlsSessionManager.RequestAsync()).getAndForget(allocator);
+pub fn setup(gpa: Allocator) !void {
+    const manager = try (try windows.GlobalSystemMediaTransportControlsSessionManager.RequestAsync()).getAndForget(gpa);
     errdefer manager.Release();
 
-    try sessionChanged({}, manager);
+    init = .{
+        .gpa = gpa,
+        .manager = manager,
+    };
 
-    token = try manager.CurrentSessionChanged(allocator, {}, sessionChanged);
-    errdefer manager.RemoveCurrentSessionChanged(token) catch unreachable;
+    init.tokens.session_changed = try manager.CurrentSessionChanged(gpa, {}, sessionChanged);
+    errdefer manager.RemoveCurrentSessionChanged(init.tokens.session_changed.?) catch unreachable;
+
+    try sessionChanged({}, manager);
 }
 
 pub fn cleanup() void {
-    //if (context.cover) |cov| {
-        //cov.deinit();
-    //}
+    if (init.tokens.session_changed) |token| {
+        init.manager.RemoveCurrentSessionChanged(token) catch {};
+    }
 
-    if (context.session) |session| {
+    if (init.session) |session| {
         session.Release();
     }
 
-    gpa.allocator().free(context.title);
-    gpa.allocator().free(context.artist);
+    init.gpa.free(init.title);
+    init.gpa.free(init.artist);
 
-    manager.RemoveCurrentSessionChanged(token) catch unreachable;
-    manager.Release();
-
-    // windows.RoUninitialize();
-
-    _ = gpa.deinit();
+    init.manager.Release();
 }
 
-// this function can be called from any thread
-// or from the same thread with 2 diffrent backends
-// multi backend is suck a brainfuck
 pub fn render(gui: *Gui) void {
-    // add ref to all image objects!!!!!!
+    init.mutex.lock();
 
-    const session = blk: {
-        context.mutex.lock();
-        defer context.mutex.unlock();
-
-        break :blk context.session orelse return;
+    const session = init.session orelse {
+        init.mutex.unlock();
+        return;
     };
 
     const pos = &[2]f32{ 24.0, 24.0 };
@@ -92,6 +85,27 @@ pub fn render(gui: *Gui) void {
 
     const x = 0;
     const y = 1;
+
+    const progress = blk: {
+        // TODO: capture them errors !!!
+        const playback_info = session.GetPlaybackInfo() catch unreachable;
+        defer playback_info.Release();
+
+        if (playback_info.PlaybackStatus() != .Playing) {
+            break :blk init.timeline.position;
+        }
+
+        const timestamp = std.time.milliTimestamp();
+        const elapsed = timestamp - init.timeline.last_updated;
+
+        break :blk init.timeline.position + elapsed;
+    };
+
+    const bar_max_width = image_size + padding + width + padding + 2.0;
+    const bar_width = @min(@as(f32, @floatFromInt(progress)) / @as(f32, @floatFromInt(init.timeline.end_time)), 1.0) * bar_max_width;
+    const fraction = bar_width - @floor(bar_width);
+
+    init.mutex.unlock();
 
     // background
     gui.rect(.{ -1.0 + pos[x], -1.0 + pos[y] }, .{ pos[x] + image_size + padding + width + padding + 1.0, pos[y] + image_size + 1.0 }, 0x202E36FF);
@@ -105,28 +119,6 @@ pub fn render(gui: *Gui) void {
 
     // cover
 
-    const progress = blk: {
-        context.mutex.lock();
-        defer context.mutex.unlock();
-
-        // TODO: capture them errors !!!
-        const playback_info = session.GetPlaybackInfo() catch unreachable;
-        defer playback_info.Release();
-
-        if (playback_info.PlaybackStatus() != .Playing) {
-            break :blk context.timeline.position;
-        }
-
-        const timestamp = std.time.milliTimestamp();
-        const elapsed = timestamp - context.timeline.last_updated;
-
-        break :blk context.timeline.position + elapsed;
-    };
-
-    const bar_max_width = image_size + padding + width + padding + 2.0;
-    const bar_width = @min(@as(f32, @floatFromInt(progress)) / @as(f32, @floatFromInt(context.timeline.end_time)), 1.0) * bar_max_width;
-    const fraction = bar_width - @floor(bar_width);
-
     // progress bar
     gui.rect(.{ -1.0 + pos[x], pos[y] + image_size }, .{ -1.0 + pos[x] + @floor(bar_width), pos[y] + image_size + 1.0 }, 0x00DFA2FF);
     if (fraction > 0.0) {
@@ -134,7 +126,6 @@ pub fn render(gui: *Gui) void {
         const col = 0x00DFA200 + @as(u32, @intFromFloat(fraction * 255.0));
         gui.rect(.{ -1.0 + pos[x] + @floor(bar_width), pos[y] + image_size }, .{ -1.0 + pos[x] + @floor(bar_width) + 1.0, pos[y] + image_size + 1.0 }, col);
     }
-
 
     // properties
     // todo: handle err
@@ -175,40 +166,40 @@ fn ellipsisW(gui: *Gui, pos: [2]f32, msg: []const u16, width: f32, descriptor: G
 }
 
 pub fn sessionChanged(_: void, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
-    const session = blk: {
-        context.mutex.lock();
-        defer context.mutex.unlock();
+    init.mutex.lock();
+    defer init.mutex.unlock();
 
-        if (context.session) |session| {
+    const session = blk: {
+        if (init.session) |session| {
             session.Release();
-            context.session = null;
+            init.session = null;
         }
 
-        context.session = (try manager.GetCurrentSession()) orelse return;
-        break :blk context.session.?;
+        init.session = (try init.manager.GetCurrentSession()) orelse return;
+        break :blk init.session.?;
     };
 
-    try timelineChanged({}, session);
-    try propartiesChanged({}, session);
+    init.tokens.proparties_changed = try session.TimelinePropertiesChanged(init.gpa, {}, timelineChanged);
+    //_ = try session.MediaPropertiesChanged(init.gpa, {}, propartiesChanged);
 
-    _ = try session.TimelinePropertiesChanged(gpa.allocator(), {}, timelineChanged);
-    _ = try session.MediaPropertiesChanged(gpa.allocator(), {}, propartiesChanged);
+    try timelineChanged({}, session);
+    //try propartiesChanged({}, session);
 }
 
 pub fn propartiesChanged(_: void, session: windows.GlobalSystemMediaTransportControlsSession) !void {
-    const properties = try (try session.TryGetMediaPropertiesAsync()).getAndForget(gpa.allocator());
+    const properties = try (try session.TryGetMediaPropertiesAsync()).getAndForget(init.gpa);
     defer properties.Release();
 
     const thumbnail = (try properties.Thumbnail()) orelse return;
     defer thumbnail.Release();
 
-    const stream = try (try thumbnail.OpenReadAsync()).getAndForget(gpa.allocator());
+    const stream = try (try thumbnail.OpenReadAsync()).getAndForget(init.gpa);
     defer stream.Release();
 
-    const decoder = try (try windows.BitmapDecoder.CreateAsync(@ptrCast(stream))).getAndForget(gpa.allocator());
+    const decoder = try (try windows.BitmapDecoder.CreateAsync(@ptrCast(stream))).getAndForget(init.gpa);
     defer decoder.Release();
 
-    const frame = try (try decoder.GetFrameAsync(0)).getAndForget(gpa.allocator());
+    const frame = try (try decoder.GetFrameAsync(0)).getAndForget(init.gpa);
     defer frame.Release();
 
     const transform = try windows.IBitmapTransform.new();
@@ -247,11 +238,11 @@ pub fn propartiesChanged(_: void, session: windows.GlobalSystemMediaTransportCon
         transform,
         windows.ExifOrientationMode_IgnoreExifOrientation,
         windows.ColorManagementMode_DoNotColorManage,
-    )).getAndForget(gpa.allocator());
+    )).getAndForget(init.gpa);
     defer pixels.Release();
 
-    context.mutex.lock();
-    defer context.mutex.unlock();
+    init.mu.lock();
+    defer init.mu.unlock();
 
     //if (context.cover) |cov| {
         //cov.deinit();
@@ -269,11 +260,17 @@ pub fn propartiesChanged(_: void, session: windows.GlobalSystemMediaTransportCon
         //.format = .rgba,
     //});
 
-    gpa.allocator().free(context.title);
-    gpa.allocator().free(context.artist);
+    //init.gpa.free(init.title);
+    //init.gpa.free(init.artist);
 
-    context.title = try gpa.allocator().dupe(u16, properties.Title());
-    context.artist = try gpa.allocator().dupe(u16, properties.Artist());
+    const title = properties.Title();
+    const artist = properties.Artist();
+
+    init.title = try init.gpa.realloc(init.title, title.len);
+    init.artist = try init.gpa.realloc(init.artist, artist.len);
+
+    @memcpy(init.title, title);
+    @memcpy(init.artist, artist);
 }
 
 pub fn timelineChanged(_: void, session: windows.GlobalSystemMediaTransportControlsSession) !void {
@@ -282,11 +279,10 @@ pub fn timelineChanged(_: void, session: windows.GlobalSystemMediaTransportContr
 
     const timestamp = std.time.milliTimestamp();
 
-    // perhaps when working with COM stuff we can use RW locks
-    context.mutex.lock();
-    defer context.mutex.unlock();
+    init.mutex.lock();
+    defer init.mutex.unlock();
 
-    context.timeline.last_updated = timestamp;
-    context.timeline.end_time = @divTrunc(timeline.EndTime(), 10000);
-    context.timeline.position = @divTrunc(timeline.Position(), 10000);
+    init.timeline.last_updated = timestamp;
+    init.timeline.end_time = @divTrunc(timeline.EndTime(), 10000);
+    init.timeline.position = @divTrunc(timeline.Position(), 10000);
 }
