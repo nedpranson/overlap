@@ -3,18 +3,19 @@ const windows = @import("windows.zig");
 const hooks = @import("hooks.zig");
 const renderer = @import("renderer.zig");
 const atomic = std.atomic;
+const log = std.log.scoped(.entry);
 
 var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
 
 fn setup() bool {
     const allocator = gpa.allocator();
 
-    std.log.info("attaching overlay hooks", .{});
+    log.info("attaching overlay hooks", .{});
     return hooks.init(allocator);
 }
 
 fn cleanup() void {
-    std.log.info("detaching overlay hooks", .{});
+    log.info("detaching overlay hooks", .{});
     renderer.cleanup();
     hooks.deinit();
 

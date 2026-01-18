@@ -8,6 +8,7 @@ const Image = @import("graphics/Image.zig");
 
 const mem = std.mem;
 const unicode = std.unicode;
+const log = std.log.scoped(.hooks);
 const Mutex = std.Thread.Mutex;
 const Allocator = mem.Allocator;
 const assert = std.debug.assert;
@@ -34,7 +35,7 @@ pub fn init(allocator: Allocator) bool {
     var failure = true;
 
     const kernel32 = windows.GetModuleHandle("kernel32.dll") orelse {
-        std.log.err("kernel32: module not found", .{});
+        log.err("kernel32: module not found", .{});
         return false;
     };
 
@@ -46,31 +47,31 @@ pub fn init(allocator: Allocator) bool {
     if (windows.GetProcAddress(kernel32, "LoadLibraryA")) |proc| {
         load_library_a = @ptrCast(proc);
         detours.attach(LoadLibraryA, &load_library_a) catch |err| {
-            std.log.err("kernel32: LoadLibraryA: failed to attach: {}", .{err});
+            log.err("LoadLibraryA: failed to attach: {}", .{err});
             return false;
         };
-        std.log.info("kernel32: LoadLibraryA: successfully attached", .{});
+        log.info("LoadLibraryA: successfully attached", .{});
     } else |err| {
-        std.log.err("kernel32: LoadLibraryA: failed to get proc address: {}", .{err});
+        log.err("LoadLibraryA: failed to get proc address: {}", .{err});
         return false;
     }
     defer if (failure) detours.detach(LoadLibraryA, &load_library_a) catch |err| {
-        std.log.err("kernel32: LoadLibraryA: cannot detach: {}", .{err});
+        log.err("LoadLibraryA: cannot detach: {}", .{err});
     };
 
     if (windows.GetProcAddress(kernel32, "LoadLibraryW")) |proc| {
         load_library_w = @ptrCast(proc);
         detours.attach(LoadLibraryW, &load_library_w) catch |err| {
-            std.log.err("kernel32: LoadLibraryW: failed to attach: {}", .{err});
+            log.err("LoadLibraryW: failed to attach: {}", .{err});
             return false;
         };
-        std.log.info("kernel32: LoadLibraryW: successfully attached", .{});
+        log.info("LoadLibraryW: successfully attached", .{});
     } else |err| {
-        std.log.err("kernel32: LoadLibraryW: failed to get proc address: {}", .{err});
+        log.err("LoadLibraryW: failed to get proc address: {}", .{err});
         return false;
     }
     defer if (failure) detours.detach(LoadLibraryW, &load_library_w) catch |err| {
-        std.log.err("kernel32: LoadLibraryW: cannot detach: {}", .{err});
+        log.err("LoadLibraryW: cannot detach: {}", .{err});
     };
 
     mutex.lock();
@@ -94,15 +95,15 @@ pub fn deinit() void {
     defer load_library_w = undefined;
 
     if (detours.detach(LoadLibraryA, &load_library_a)) {
-        std.log.info("kernel32: LoadLibraryA: successfully detached", .{});
+        log.info("LoadLibraryA: successfully detached", .{});
     } else |err| {
-        std.log.err("kernel32: LoadLibraryA: cannot detach: {}", .{err});
+        log.err("LoadLibraryA: cannot detach: {}", .{err});
     }
 
     if (detours.detach(LoadLibraryW, &load_library_w)) {
-        std.log.info("kernel32: LoadLibraryW: successfully detached", .{});
+        log.info("LoadLibraryW: successfully detached", .{});
     } else |err| {
-        std.log.err("kernel32: LoadLibraryW: cannot detach: {}", .{err});
+        log.err("LoadLibraryW: cannot detach: {}", .{err});
     }
 
     //if (d3d11.active()) {
