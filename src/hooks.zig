@@ -27,7 +27,8 @@ pub const Hook = struct {
     uload_image: *const fn (id: u32) void,
 };
 
-pub fn init() bool {
+pub fn init(allocator: Allocator) bool {
+    _ = allocator;
     assert(hooked == false);
 
     var failure = true;
@@ -92,13 +93,17 @@ pub fn deinit() void {
     defer load_library_a = undefined;
     defer load_library_w = undefined;
 
-    detours.detach(LoadLibraryA, &load_library_a) catch |err| {
+    if (detours.detach(LoadLibraryA, &load_library_a)) {
+        std.log.info("kernel32: LoadLibraryA: successfully detached", .{});
+    } else |err| {
         std.log.err("kernel32: LoadLibraryA: cannot detach: {}", .{err});
-    };
+    }
 
-    detours.detach(LoadLibraryW, &load_library_w) catch |err| {
+    if (detours.detach(LoadLibraryW, &load_library_w)) {
+        std.log.info("kernel32: LoadLibraryW: successfully detached", .{});
+    } else |err| {
         std.log.err("kernel32: LoadLibraryW: cannot detach: {}", .{err});
-    };
+    }
 
     //if (d3d11.active()) {
         //d3d11.detach();
@@ -129,7 +134,7 @@ fn LoadLibraryW(lpLibFileName: windows.LPCWSTR) callconv(.winapi) ?windows.HMODU
         defer mutex.unlock();
 
         // TODO: Unsafe
-        _ = d3d11.attach(std.heap.page_allocator, lib);
+        //_ = d3d11.attach(std.heap.page_allocator, lib);
     }
 
     return lib;

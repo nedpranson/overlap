@@ -1,21 +1,25 @@
 const std = @import("std");
 const windows = @import("windows.zig");
-const detours = @import("detours.zig");
 const hooks = @import("hooks.zig");
 const renderer = @import("renderer.zig");
 const atomic = std.atomic;
 
+var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
+
 fn setup() bool {
+    const allocator = gpa.allocator();
+
     std.log.info("attaching overlay hooks", .{});
-    return hooks.init();
+    return hooks.init(allocator);
 }
 
 fn cleanup() void {
-    std.log.info("deattaching overlay hooks", .{});
+    std.log.info("detaching overlay hooks", .{});
     renderer.cleanup();
     hooks.deinit();
-}
 
+    _ = gpa.deinit();
+}
 
 const State = enum(u8) {
     initialized,
@@ -71,7 +75,7 @@ fn logFn(
     const prefix2 = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
 
     var buffer = [_]u8{'\x00'} ** 4096;
-    const msg = std.fmt.bufPrintZ(&buffer, level_txt ++ prefix2 ++ format, args) catch blk: {
+    const msg = std.fmt.bufPrintZ(&buffer, "overlap: " ++ level_txt ++ prefix2 ++ format, args) catch blk: {
         buffer[buffer.len - 1] = '\x00';
         break :blk buffer[0 .. buffer.len - 1 :0];
     };
