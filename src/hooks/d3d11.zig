@@ -260,19 +260,17 @@ pub fn active() bool {
     return zelf != null;
 }
 
-fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
-    //const hook = &zelf.?;
-    const refs = release(pIUnknown);
+fn Release(pSwapChain: *dxgi.IDXGISwapChain) callconv(.winapi) windows.ULONG {
+    const hook = &zelf.?;
+    const refs = release(pSwapChain);
 
-    std.debug.print("Release called: {}\n", .{refs});
-
-    //if (refs == 0) {
-        //std.debug.print("Releasing!\n", .{});
-        //if (hook.instance_map.fetchRemove(@ptrCast(pIUnknown))) |kv| {
-            //var ins = kv.value;
-            //ins.deinit(hook.allocator);
-        //}
-    //}
+    if (refs == 0) {
+        if (hook.instance_map.fetchRemove(pSwapChain)) |kv| {
+            std.debug.print("releasing IDXGISwapChain: {*}\n", .{pSwapChain});
+            var instance = kv.value;
+            instance.deinit();
+        }
+    }
 
     return refs;
 }
