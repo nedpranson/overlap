@@ -10,7 +10,7 @@ const Mutex = std.Thread.Mutex;
 const Allocator = mem.Allocator;
 const assert = std.debug.assert;
 
-var hook_mu: Mutex = .{};
+var hook_mu: Mutex.Recursive = .init;
 var allocator: Allocator = undefined;
 
 var load_library_a: *@TypeOf(LoadLibraryA) = undefined;
