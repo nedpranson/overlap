@@ -39,32 +39,28 @@ const Resource = struct {
 const Instance = struct {
     device: graphics.d3d11.Device,
 
-    resources: SynchronizedHashMap(*const Image, Resource),
+    //resources: SynchronizedHashMap(*const Image, Resource),
     //unloaded_resources: SynchronizedArrayList(u32),
 
-    fn deinit(self: *Instance, allocator: Allocator) void {
-        var it = self.resources.valueIterator();
-        defer it.done();
+    fn deinit(self: *Instance) void {
+        //var it = self.resources.valueIterator();
+        //defer it.done();
 
-        while (it.next()) |v| v.deinit();
+        //while (it.next()) |v| v.deinit();
 
-        self.resources.deinit(allocator);
+        //self.resources.deinit(allocator);
         self.device.deinit();
     }
 };
 
 allocator: Allocator,
-instance_map: SynchronizedHashMap(*dxgi.IDXGISwapChain, Instance),
-
-var zelf: ?@This() = null;
-
-// There should be a way to make these lock free
-// perhaps thread local
-//var device_map: std.AutoArrayHashMapUnmanaged(*dxgi.IDXGISwapChain, graphics.d3d11.Device) = .empty;
+instance_map: SynchronizedHashMap(*const dxgi.IDXGISwapChain, Instance),
 
 var release: *@TypeOf(Release) = undefined;
 var present: *@TypeOf(Present) = undefined;
 var resize_buffers: *@TypeOf(ResizeBuffers) = undefined;
+
+var zelf: ?@This() = null;
 
 // todo: make it global or sum
 // var fr: @import("../graphics/FontRenderer.zig") = undefined;
@@ -230,7 +226,7 @@ pub fn detach() void {
 
     var it = hook.instance_map.map.valueIterator();
     while (it.next()) |ins| {
-        ins.deinit(hook.allocator);
+        ins.deinit();
     }
 
     hook.instance_map.deinit(hook.allocator);
@@ -339,22 +335,31 @@ fn Present(
     SyncInterval: windows.UINT,
     Flags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
-    //const hook = &zelf.?;
-    //const ins = blk: {
-        //const res = hook.instance_map.getOrPut(hook.allocator, pSwapChain) catch return present(pSwapChain, SyncInterval, Flags);
-        //defer res.done();
+    const hook = &zelf.?;
+    const instance = blk: {
+        const result = hook.instance_map.getOrPut(hook.allocator, pSwapChain) catch break :blk null;
+        defer result.done();
 
-        //if (!res.found_existing) {
-            //const device = graphics.d3d11.Device.init(pSwapChain) catch return present(pSwapChain, SyncInterval, Flags);
+        if (!result.found_existing) {
+            @branchHint(.cold);
 
-            //res.value_ptr.* = .{
-                //.resources = .empty,
-                //.device = device,
-            //};
-        //}
+            std.debug.print("new IDXGISwapChain: {*}\n", .{pSwapChain});
 
-        //break :blk res.value_ptr;
-    //};
+            const device = graphics.d3d11.Device.init(pSwapChain) catch |err| {
+                log.err("Device: failed to initialize: {}", .{err});
+                break :blk null;
+            };
+
+            result.value_ptr.* = .{
+                .device = device,
+            };
+        }
+
+        break :blk result.value_ptr;
+
+    } orelse return present(pSwapChain, SyncInterval, Flags);
+
+    _ = instance;
 
     //var gui: Gui = .init(
         //&draw_commands,
@@ -391,24 +396,27 @@ fn ResizeBuffers(
     NewFormat: dxgi.DXGI_FORMAT,
     SwapChainFlags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
-    //const hook = &zelf.?;
+    const hook = &zelf.?;
 
-    //if (hook.instance_map.fetchRemove(pSwapChain)) |kv| {
-        //var ins = kv.value;
-        //ins.deinit(hook.allocator);
-    //} else {
-        //return resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
-    //}
+    if (hook.instance_map.fetchRemove(pSwapChain)) |kv| {
+        var instance = kv.value;
+        instance.deinit();
+    } else {
+        return resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+    }
 
-    // todo: err handle debug and stuff
     const hr = resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
-    //if (hr == windows.S_OK) {
-        //const device = graphics.d3d11.Device.init(pSwapChain) catch return hr;
-        //hook.instance_map.put(hook.allocator, pSwapChain, .{ .resources = .empty, .device = device }) catch {
-            //device.deinit();
-            //return hr;
-        //};
-    //}
+    if (hr == windows.S_OK) {
+        const device = graphics.d3d11.Device.init(pSwapChain) catch |err| {
+            log.err("Device: failed to initialize: {}", .{err});
+            return hr;
+        };
+
+        hook.instance_map.put(hook.allocator, pSwapChain, .{ .device = device }) catch {
+            device.deinit();
+            return hr;
+        };
+    }
 
     return hr;
 }
