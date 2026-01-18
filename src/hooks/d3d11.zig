@@ -282,10 +282,6 @@ fn Release(pSwapChain: *dxgi.IDXGISwapChain) callconv(.winapi) windows.ULONG {
 // key as ptr to Image
 // and we can add an event like make/destroy image and do some stuff based on it idk
 
-threadlocal var draw_commands: [shared.max_draw_commands]shared.DrawCommand = undefined;
-threadlocal var draw_verticies: [shared.max_verticies]shared.DrawVertex = undefined;
-threadlocal var draw_indicies: [shared.max_indicies]shared.DrawIndex = undefined;
-
 const ImageCache = struct {
     tex: *d3d11.ID3D11Texture2D,
     srv: *d3d11.ID3D11ShaderResourceView,
@@ -357,31 +353,27 @@ fn Present(
 
     } orelse return present(pSwapChain, SyncInterval, Flags);
 
-    _ = instance;
+    const static = struct {
+        threadlocal var draw_commands: [shared.max_draw_commands]shared.DrawCommand = undefined;
+        threadlocal var draw_verticies: [shared.max_verticies]shared.DrawVertex = undefined;
+        threadlocal var draw_indicies: [shared.max_indicies]shared.DrawIndex = undefined;
+    };
 
-    //var gui: Gui = .init(
-        //&draw_commands,
-        //&draw_verticies,
-        //&draw_indicies,
+    var gui: Gui = .init(
+        &static.draw_commands,
+        &static.draw_verticies,
+        &static.draw_indicies,
         //&fr,
         //ins,
         //&requestSRV,
-    //);
-    //renderer.render(&gui);
+    );
 
-    // todo: fix this race
-    // image can be unloaded when in render
-    // this syncing is kinda messy
-    // need some way to make it lock free
+    renderer.render(&gui);
 
-    // if errors maybe we should detach d3d11
-    // rename to present
-
-    //ins.device.render(gui.draw_verticies.items, gui.draw_indecies.items, gui.draw_commands.items) catch |err| {
-        //log.err("render failed: {}", .{err});
-    //};
-
-    // perhaps here release all the resources we dont need, like srv ones
+    // todo: on any error we need to unhhok ourselfs
+    instance.device.render(gui.draw_verticies.items, gui.draw_indecies.items, gui.draw_commands.items) catch |err| {
+        log.err("Device: failed to render objects: {}", .{err});
+    };
 
     return present(pSwapChain, SyncInterval, Flags);
 }
