@@ -3,29 +3,31 @@ const windows = @import("windows.zig");
 const detours = @import("detours.zig");
 const hooks = @import("hooks.zig");
 const renderer = @import("renderer.zig");
+const atomic = std.atomic;
 
-// maybe return like an error.Failed or smth so cleanup would not be called
 fn setup() bool {
     return hooks.init();
 }
 
 fn cleanup() void {
-    hooks.deinit();
     renderer.cleanup();
+    hooks.deinit();
 }
 
-var enabled: std.atomic.Value(bool) = .init(false);
 
-// Todo: remove mutex
-var mutex: std.Thread.Mutex = .{};
-var success = false;
+const State = enum(u8) {
+    initialized,
+    initializing,
+    failure,
+    uninitialized,
+};
+
+var state: atomic.Value(State) = .init(.uninitialized);
 
 pub export fn __overlap_hook_proc(code: c_int, wParam: windows.WPARAM, lParam: windows.LPARAM) callconv(.winapi) windows.LRESULT {
-    if (isTargetProcess() and enabled.cmpxchgStrong(false, true, .acq_rel, .monotonic) == null) {
-        mutex.lock();
-        defer mutex.unlock();
-
-        success = @call(.always_inline, setup, .{});
+    if (isTargetProcess() and state.cmpxchgStrong(.uninitialized, .initializing, .acq_rel, .monotonic) == null) {
+        const s: State = if (@call(.always_inline, setup, .{})) .initialized else .failure;
+        state.store(s, .release);
     }
 
     return windows.user32.CallNextHookEx(null, code, wParam, lParam);
@@ -35,17 +37,19 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
     _ = hinstDLL;
     _ = lpvReserved;
 
-    if (fdwReason == windows.DLL_PROCESS_DETACH and isTargetProcess() and enabled.load(.acquire)) {
-        mutex.lock();
-        defer mutex.unlock();
+    if (fdwReason != windows.DLL_PROCESS_DETACH) return windows.TRUE;
 
-        if (success) {
-            // calling winapi inside DllMain is 'forbidden'
-            @call(.always_inline, cleanup, .{});
+    while (true) {
+        switch (state.load(.acquire)) {
+            .initializing => atomic.spinLoopHint(),
+            .initialized,
+            .uninitialized,
+            .failure => |s| {
+                if (s == .initialized) cleanup();
+                return windows.TRUE;
+            },
         }
     }
-
-    return windows.TRUE;
 }
 
 fn isTargetProcess() bool {

@@ -75,10 +75,10 @@ pub fn init() bool {
     mutex.lock();
     defer mutex.unlock();
 
-    if (windows.GetModuleHandle("d3d11.dll")) |mod| {
+    //if (windows.GetModuleHandle("d3d11.dll")) |mod| {
         // TODO: Unsafe
-        _ = d3d11.attach(std.heap.page_allocator, mod);
-    }
+        //_ = d3d11.attach(std.heap.page_allocator, mod);
+    //}
 
     failure = false;
     hooked = true;
@@ -100,9 +100,9 @@ pub fn deinit() void {
         std.log.err("kernel32: LoadLibraryW: cannot detach: {}", .{err});
     };
 
-    if (d3d11.active()) {
-        d3d11.detach();
-    }
+    //if (d3d11.active()) {
+        //d3d11.detach();
+    //}
 }
 
 fn LoadLibraryA(lpLibFileName: windows.LPCSTR) callconv(.winapi) ?windows.HMODULE {
@@ -114,7 +114,7 @@ fn LoadLibraryA(lpLibFileName: windows.LPCSTR) callconv(.winapi) ?windows.HMODUL
         defer mutex.unlock();
 
         // TODO: Unsafe
-        _ = d3d11.attach(std.heap.page_allocator, lib);
+        //_ = d3d11.attach(std.heap.page_allocator, lib);
     }
 
     return lib;
