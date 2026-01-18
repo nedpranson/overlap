@@ -259,16 +259,16 @@ pub fn active() bool {
 }
 
 fn Release(pIUnknown: *windows.IUnknown) callconv(.winapi) windows.ULONG {
-    const hook = &zelf.?;
+    //const hook = &zelf.?;
     const refs = release(pIUnknown);
 
-    if (refs == 0) {
-        std.debug.print("Releasing!\n", .{});
-        if (hook.instance_map.fetchRemove(@ptrCast(pIUnknown))) |kv| {
-            var ins = kv.value;
-            ins.deinit(hook.allocator);
-        }
-    }
+    //if (refs == 0) {
+        //std.debug.print("Releasing!\n", .{});
+        //if (hook.instance_map.fetchRemove(@ptrCast(pIUnknown))) |kv| {
+            //var ins = kv.value;
+            //ins.deinit(hook.allocator);
+        //}
+    //}
 
     return refs;
 }
@@ -303,6 +303,9 @@ fn requestSRV(ctx: *anyopaque, img: *Image) *anyopaque {
 
     // img is still not thread safe as pointer can change any time
     if (!res.found_existing) {
+        // tood: we can add like a ref to the img here!
+        // to notify that our backend is using this resource and it would be unsafe to release it!
+
         @branchHint(.unlikely);
         const tex, const srv = ins.device.loadImage(img);
 

@@ -103,6 +103,8 @@ pub const Descriptor = struct {
     color: u32 = 0xFFFFFFFF,
 };
 
+// text functions are not threadsafe!!!!!!!!!
+
 // as now we're not using kerning or shaping it's all good, later if we will choose todo these stuff
 // we will need to pass in a string to compite its width or some other work around
 pub fn advanceWidth(self: *Gui, codepoint: u21, descriptor: Descriptor) !u32 {
