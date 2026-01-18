@@ -6,10 +6,12 @@ const renderer = @import("renderer.zig");
 const atomic = std.atomic;
 
 fn setup() bool {
+    std.log.info("attaching overlay hooks");
     return hooks.init();
 }
 
 fn cleanup() void {
+    std.log.info("deattaching overlay hooks");
     renderer.cleanup();
     hooks.deinit();
 }
@@ -45,7 +47,7 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
             .initialized,
             .uninitialized,
             .failure => |s| {
-                if (s == .initialized) cleanup();
+                if (s == .initialized) @call(.always_inline, cleanup, .{});
                 return windows.TRUE;
             },
         }
