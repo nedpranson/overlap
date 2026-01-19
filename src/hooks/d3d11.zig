@@ -104,7 +104,7 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
     var sd = std.mem.zeroes(dxgi.DXGI_SWAP_CHAIN_DESC);
     sd.BufferCount = 1;
     sd.BufferDesc.Format = dxgi.DXGI_FORMAT_R8G8B8A8_UNORM;
-    sd.OutputWindow = windows.GetForegroundWindow().?;
+    sd.OutputWindow = window;
     sd.SampleDesc.Count = 1;
     sd.Windowed = windows.TRUE;
     sd.SwapEffect = dxgi.DXGI_SWAP_EFFECT_DISCARD;

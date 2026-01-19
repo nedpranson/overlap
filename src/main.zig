@@ -98,6 +98,7 @@ pub fn cleanup() void {
 
 pub fn render(gui: *Gui) void {
     std.debug.print("render called!\n", .{});
+    std.log.debug("render called!\n", .{});
     //const playback_info = ctx.getPlaybackInfo() orelse return;
     //_ = playback_info;
 
