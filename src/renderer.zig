@@ -4,6 +4,7 @@ const main = @import("main.zig");
 
 const atomic = std.atomic;
 const Allocator = std.mem.Allocator;
+const Thread = std.Thread;
 
 const State = enum(u8) {
     initialized,
@@ -15,23 +16,37 @@ const State = enum(u8) {
 };
 
 var state: atomic.Value(State) = .init(.uninitialized);
+var thread: Thread = undefined;
 
-// todo: on failure we need to detach our selfs
-// shit
+var reset_event: Thread.ResetEvent = .{};
 
-fn setup(gpa: Allocator) bool {
+// todo: need to detach on on .failure state!
+
+fn setup(gpa: Allocator) void {
     main.setup(gpa) catch |err| {
-        std.log.err("could not setup: {}", .{err});
-        return false;
+        std.debug.print("error: {s}\n", .{@errorName(err)});
+        if (@errorReturnTrace()) |trace| {
+            std.debug.dumpStackTrace(trace.*);
+        }
+        state.store(.failure, .release);
+        return;
     };
-    return true;
+
+    state.store(.initialized, .release);
+    reset_event.wait();
+
+    main.cleanup();
 }
 
 pub fn cleanup() void {
     while (true) {
         switch (state.load(.acquire)) {
             .initialized => if (state.cmpxchgWeak(.initialized, .exiting, .release, .monotonic) == null) {
-                main.cleanup();
+                reset_event.set();
+
+                thread.join();
+                thread = undefined;
+
                 state.store(.exited, .release);
             },
             .initializing => atomic.spinLoopHint(),
@@ -47,8 +62,10 @@ pub fn render(gpa: Allocator, gui: *Gui) void {
             .initializing => atomic.spinLoopHint(),
             .failure, .exiting, .exited => return,
             .uninitialized => if (state.cmpxchgWeak(.uninitialized, .initializing, .release, .monotonic) == null) {
-                const s: State = if (@call(.always_inline, setup, .{gpa})) .initialized else .failure;
-                state.store(s, .release);
+                thread = Thread.spawn(.{}, setup, .{gpa}) catch blk: {
+                    state.store(.failure, .release);
+                    break :blk undefined;
+                };
             },
         }
     }
