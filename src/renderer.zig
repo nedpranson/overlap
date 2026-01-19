@@ -10,6 +10,8 @@ const State = enum(u8) {
     initializing,
     failure,
     uninitialized,
+    exiting,
+    exited
 };
 
 var state: atomic.Value(State) = .init(.uninitialized);
@@ -27,9 +29,12 @@ fn setup(gpa: Allocator) bool {
 pub fn cleanup() void {
     while (true) {
         switch (state.load(.acquire)) {
-            .initialized => return main.cleanup(),
+            .initialized => if (state.cmpxchgWeak(.initialized, .exiting, .release, .monotonic) == null) {
+                main.cleanup();
+                state.store(.exited, .release);
+            },
             .initializing => atomic.spinLoopHint(),
-            .failure, .uninitialized => return,
+            .failure, .uninitialized, .exiting, .exited => return,
         }
     }
 }
@@ -39,7 +44,7 @@ pub fn render(gpa: Allocator, gui: *Gui) void {
         switch (state.load(.acquire)) {
             .initialized => return main.render(gui),
             .initializing => atomic.spinLoopHint(),
-            .failure => return,
+            .failure, .exiting, .exited => return,
             .uninitialized => if (state.cmpxchgWeak(.uninitialized, .initializing, .release, .monotonic) == null) {
                 const s: State = if (@call(.always_inline, setup, .{gpa})) .initialized else .failure;
                 state.store(s, .release);
