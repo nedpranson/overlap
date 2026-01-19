@@ -1170,6 +1170,10 @@ pub const GlobalSystemMediaTransportControlsSession = struct {
         return (try self.handle.add_TimelinePropertiesChanged(handler)).value;
     }
 
+    pub inline fn RemoveTimelinePropertiesChanged(self: GlobalSystemMediaTransportControlsSession, token: i64) !void {
+        return self.handle.remove_TimelinePropertiesChanged(.{ .value = token });
+    }
+
     pub fn MediaPropertiesChanged(
         self: GlobalSystemMediaTransportControlsSession,
         allocator: Allocator,

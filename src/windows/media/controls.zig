@@ -247,6 +247,25 @@ pub const IGlobalSystemMediaTransportControlsSession = extern struct {
         };
     }
 
+    pub const RemoveTimelinePropertiesChangedError  = error{
+        Unexpected,
+    };
+
+    pub fn remove_TimelinePropertiesChanged(
+        self: *IGlobalSystemMediaTransportControlsSession,
+        token: EventRegistrationToken,
+    ) RemoveTimelinePropertiesChangedError!void {
+        const FnType = fn (*IGlobalSystemMediaTransportControlsSession, EventRegistrationToken) callconv(.winapi) HRESULT;
+
+        const remove_timeline_properties_changed: *const FnType = @ptrCast(self.vtable[26]);
+        const hr = remove_timeline_properties_changed(self, token);
+
+        return switch (hr) {
+            windows.S_OK => {},
+            else => windows.unexpectedError(windows.HRESULT_CODE(hr)),
+        };
+    }
+
     pub const AddPlaybackInfoChangedError = error{
         Unexpected,
     };
