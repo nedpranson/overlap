@@ -91,10 +91,12 @@ pub fn setup(gpa: Allocator) !void {
 }
 
 pub fn cleanup() void {
+    std.debug.print("cleanup called!\n", .{});
     ctx.deinit();
 }
 
 pub fn render(gui: *Gui) void {
+    std.debug.print("render called!\n", .{});
     const playback_info = ctx.getPlaybackInfo() orelse return;
     _ = playback_info;
 

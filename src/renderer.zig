@@ -17,6 +17,7 @@ const State = enum(u8) {
 var state: atomic.Value(State) = .init(.uninitialized);
 
 // todo: on failure we need to detach our selfs
+// shit
 
 fn setup(gpa: Allocator) bool {
     main.setup(gpa) catch |err| {
