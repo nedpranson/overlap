@@ -14,10 +14,11 @@ const State = enum(u8) {
 
 var state: atomic.Value(State) = .init(.uninitialized);
 
+// todo: on failure we need to detach our selfs
+
 fn setup(gpa: Allocator) bool {
-    // todo: format error message!
     main.setup(gpa) catch |err| {
-        std.log.err("{}", .{err});
+        std.log.err("could not setup: {}", .{err});
         return false;
     };
     return true;
