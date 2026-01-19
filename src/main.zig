@@ -86,19 +86,20 @@ const Context = struct {
 var ctx: Context = undefined;
 
 pub fn setup(gpa: Allocator) !void {
-    _ = gpa;
     std.log.debug("hello from: {}\n", .{std.Thread.getCurrentId()});
-    //windows.RoInitialize(windows.RO_INIT_MULTITHREADED) catch unreachable;
 
-    //try ctx.init(gpa);
-    //errdefer ctx.deinit();
+    try windows.RoInitialize(windows.RO_INIT_MULTITHREADED);
+    errdefer windows.RoUninitialize();
+
+    try ctx.init(gpa);
+    errdefer ctx.deinit();
 }
 
 pub fn cleanup() void {
     std.log.debug("bye from: {}\n", .{std.Thread.getCurrentId()});
-    //windows.RoInitialize(windows.RO_INIT_MULTITHREADED) catch unreachable;
 
-    //ctx.deinit();
+    ctx.deinit();
+    windows.RoUninitialize();
 }
 
 pub fn render(gui: *Gui) void {

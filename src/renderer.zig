@@ -67,6 +67,7 @@ pub fn render(gpa: Allocator, gui: *Gui) void {
                 };
                 // idk why but it seems when joining thread from another thread it just freezes
                 // todo: investigate this maybe it's smth wrong with zig's smth lib
+                // todo: if it is smth with zig just windows api
                 thread.detach();
             },
         }
