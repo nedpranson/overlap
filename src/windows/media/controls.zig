@@ -346,7 +346,10 @@ pub const IGlobalSystemMediaTransportControlsSessionManager = extern struct {
         Unexpected,
     };
 
-    pub fn remove_CurrentSessionChanged(self: *IGlobalSystemMediaTransportControlsSessionManager, token: EventRegistrationToken) AddCurrentSessionChangedError!void {
+    pub fn remove_CurrentSessionChanged(
+        self: *IGlobalSystemMediaTransportControlsSessionManager,
+        token: EventRegistrationToken,
+    ) RemoveCurrentSessionChangedError!void {
         const FnType = fn (*IGlobalSystemMediaTransportControlsSessionManager, EventRegistrationToken) callconv(.winapi) HRESULT;
 
         const remove_current_session_chnaged: *const FnType = @ptrCast(self.vtable[9]);
