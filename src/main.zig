@@ -37,8 +37,8 @@ const Context = struct {
             },
         };
 
-        //c.tokens.session_changed = try manager.CurrentSessionChanged(gpa, c, handleSession);
-        //errdefer manager.RemoveCurrentSessionChanged(c.tokens.session_changed) catch unreachable;
+        c.tokens.session_changed = try manager.CurrentSessionChanged(gpa, c, handleSession);
+        errdefer manager.RemoveCurrentSessionChanged(c.tokens.session_changed) catch unreachable;
 
         // init session itself like add all the tokens
         // and only then init session_changed event
@@ -53,7 +53,7 @@ const Context = struct {
     }
 
     fn deinit(c: *Context) void {
-        //c.manager.RemoveCurrentSessionChanged(c.tokens.session_changed) catch unreachable;
+        c.manager.RemoveCurrentSessionChanged(c.tokens.session_changed) catch unreachable;
 
         // wait till all work is done! like in handleSessions and other handles
         // as now as we deinit object handleSession can be running
@@ -86,18 +86,19 @@ const Context = struct {
 var ctx: Context = undefined;
 
 pub fn setup(gpa: Allocator) !void {
+    windows.RoInitialize() catch unreachable;
+
     try ctx.init(gpa);
     errdefer ctx.deinit();
 }
 
 pub fn cleanup() void {
-    std.debug.print("cleanup called!\n", .{});
-    std.log.debug("cleanup called!\n", .{});
+    windows.RoInitialize() catch unreachable;
+
     ctx.deinit();
 }
 
 pub fn render(gui: *Gui) void {
-    std.debug.print("render called!\n", .{});
     //const playback_info = ctx.getPlaybackInfo() orelse return;
     //_ = playback_info;
 

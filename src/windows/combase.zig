@@ -12,7 +12,7 @@ const HSTRING_HEADER = windows.HSTRING_HEADER;
 
 pub extern "api-ms-win-core-winrt-l1-1-0" fn RoInitialize(initType: RO_INIT_TYPE) callconv(.winapi) HRESULT;
 
-pub extern "api-ms-win-core-winrt-l1-1-0" fn RoUninitialize() void;
+pub extern "api-ms-win-core-winrt-l1-1-0" fn RoUninitialize() callconv(.winapi) void;
 
 pub extern "api-ms-win-core-winrt-l1-1-0" fn RoGetActivationFactory(
     activatableClassId: HSTRING,
