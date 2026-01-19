@@ -86,19 +86,20 @@ const Context = struct {
 var ctx: Context = undefined;
 
 pub fn setup(gpa: Allocator) !void {
-    try ctx.init(gpa);
-    errdefer ctx.deinit();
+    _ = gpa;
+    //try ctx.init(gpa);
+    //errdefer ctx.deinit();
 }
 
 pub fn cleanup() void {
     std.debug.print("cleanup called!\n", .{});
-    ctx.deinit();
+    //ctx.deinit();
 }
 
 pub fn render(gui: *Gui) void {
     std.debug.print("render called!\n", .{});
-    const playback_info = ctx.getPlaybackInfo() orelse return;
-    _ = playback_info;
+    //const playback_info = ctx.getPlaybackInfo() orelse return;
+    //_ = playback_info;
 
     const x = 0;
     const y = 1;

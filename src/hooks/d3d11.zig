@@ -159,6 +159,22 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
         resize_buffers = undefined;
     };
 
+    zelf = .{
+        .instance_map = .empty,
+        .allocator = gpa,
+    };
+    defer if (failure) {
+        var hook = &zelf.?;
+
+        var it = hook.instance_map.map.valueIterator();
+        while (it.next()) |ins| {
+            ins.deinit();
+        }
+
+        hook.instance_map.deinit(hook.allocator);
+        zelf = null;
+    };
+
     detours.attach(Release, &release) catch |err| {
         log.err("Release: failed to attach: {}", .{err});
         return false;
@@ -190,11 +206,6 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
     };
 
     failure = false;
-
-    zelf = .{
-        .instance_map = .empty,
-        .allocator = gpa,
-    };
 
     return true;
 }
