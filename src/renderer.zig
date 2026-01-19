@@ -16,9 +16,9 @@ const State = enum(u8) {
 };
 
 var state: atomic.Value(State) = .init(.uninitialized);
-var thread: Thread = undefined;
 
-var reset_event: Thread.ResetEvent = .{};
+var reset_event_a: Thread.ResetEvent = .{};
+var reset_event_b: Thread.ResetEvent = .{};
 
 // todo: need to detach on on .failure state!
 
@@ -33,19 +33,18 @@ fn setup(gpa: Allocator) void {
     };
 
     state.store(.initialized, .release);
-    reset_event.wait();
+    reset_event_a.wait();
 
     main.cleanup();
+    reset_event_b.set();
 }
 
 pub fn cleanup() void {
     while (true) {
         switch (state.load(.acquire)) {
             .initialized => if (state.cmpxchgWeak(.initialized, .exiting, .release, .monotonic) == null) {
-                reset_event.set();
-
-                thread.join();
-                thread = undefined;
+                reset_event_a.set();
+                reset_event_b.wait(); // todo: remove wait as that setup thread is still executing some code we need join!!!
 
                 state.store(.exited, .release);
             },
@@ -61,11 +60,14 @@ pub fn render(gpa: Allocator, gui: *Gui) void {
             .initialized => return main.render(gui),
             .initializing => atomic.spinLoopHint(),
             .failure, .exiting, .exited => return,
-            .uninitialized => if (state.cmpxchgWeak(.uninitialized, .initializing, .release, .monotonic) == null) {
-                thread = Thread.spawn(.{}, setup, .{gpa}) catch blk: {
+            .uninitialized => if (state.cmpxchgWeak(.uninitialized, .initializing, .release, .monotonic) == null) blk: {
+                const thread = Thread.spawn(.{}, setup, .{gpa}) catch {
                     state.store(.failure, .release);
-                    break :blk undefined;
+                    break :blk;
                 };
+                // idk why but it seems when joining thread from another thread it just freezes
+                // todo: investigate this maybe it's smth wrong with zig's smth lib
+                thread.detach();
             },
         }
     }
