@@ -11,25 +11,23 @@ const Thread = std.Thread;
 const Context = struct {
     gpa: Allocator,
 
-    // todo: make it not recurse make it clean man
-    // todo: make it robust
-    mutex: Thread.Mutex.Recursive,
+    lock: Thread.RwLock,
 
     manager: windows.GlobalSystemMediaTransportControlsSessionManager,
-    session: ?windows.GlobalSystemMediaTransportControlsSession,
-    
-    tokens: struct {
-        session_changed: i64,
-        timeline_changed: ?i64,
-    },
+    session_changed: i64,
 
-    timeline: struct {
-        last_updated: i64,
-        end_time: i64,
-        position: i64,
-    },
+    player: ?Player,
 
-    // todo: group this timeline and nullable tokens into some Session struct idk
+    const Player = struct {
+        session: windows.GlobalSystemMediaTransportControlsSession,
+        timeline_changed: i64,
+
+        timeline: struct {
+            last_updated: i64,
+            end_time: i64,
+            position: i64,
+        }
+    };
 
     fn init(c: *Context, gpa: Allocator) !void {
         const manager = try (try windows.GlobalSystemMediaTransportControlsSessionManager.RequestAsync()).getAndForget(gpa);
@@ -37,59 +35,73 @@ const Context = struct {
 
         c.* = .{
             .gpa = gpa,
-            .mutex = .init,
+            .lock = .{},
             .manager = manager,
-            .session = null,
-            .tokens = .{
-                .session_changed = undefined,
-                .timeline_changed = null,
-            },
-            .timeline = undefined,
+            .player = null,
+            .session_changed = undefined,
         };
 
-        c.tokens.session_changed = try manager.CurrentSessionChanged(gpa, c, handleSession);
-        errdefer manager.RemoveCurrentSessionChanged(c.tokens.session_changed) catch unreachable;
-
         try handleSession(c, c.manager);
+
+        c.session_changed = try manager.CurrentSessionChanged(gpa, c, handleSession);
+        errdefer manager.RemoveCurrentSessionChanged(c.session_changed) catch unreachable;
     }
 
     fn handleSession(c: *Context, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
-        c.mutex.lock();
-        defer c.mutex.unlock();
+        c.lock.lock();
+        defer c.lock.unlock();
 
-        if (c.session) |ses| {
-            ses.RemoveTimelinePropertiesChanged(c.tokens.timeline_changed.?) catch unreachable;
-            ses.Release();
+        if (c.player) |player| {
+            player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
+            player.session.Release();
+            c.player = null;
         }
 
-        c.session = try ctx.manager.GetCurrentSession();
-        if (c.session) |session| {
-            c.tokens.timeline_changed = try session.TimelinePropertiesChanged(c.gpa, c, handleTimeline);
-
-            try handleTimeline(c, session);
-        }
-    }
-
-    fn handleTimeline(c: *Context, session: windows.GlobalSystemMediaTransportControlsSession) !void {
-        c.mutex.lock();
-        defer c.mutex.unlock();
-
+        const session = (try c.manager.GetCurrentSession()) orelse return;
+        var player: Player = .{ 
+            .session = session,
+            .timeline_changed = undefined,
+            .timeline = undefined,
+        };
+        
         const timeline = try session.GetTimelineProperties();
         defer timeline.Release();
 
         const timestamp = std.time.milliTimestamp();
 
-        c.timeline.last_updated = timestamp;
-        c.timeline.end_time = @divTrunc(timeline.EndTime(), 10000);
-        c.timeline.position = @divTrunc(timeline.Position(), 10000);
+        player.timeline.last_updated = timestamp;
+        player.timeline.end_time = @divTrunc(timeline.EndTime(), 10000);
+        player.timeline.position = @divTrunc(timeline.Position(), 10000);
+
+        player.timeline_changed = try session.TimelinePropertiesChanged(c.gpa, c, handleTimeline);
+        errdefer player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
+
+        c.player = player;
+    }
+
+    fn handleTimeline(c: *Context, _: windows.GlobalSystemMediaTransportControlsSession) !void {
+        c.lock.lock();
+        defer c.lock.unlock();
+
+        // this is probs wrong as this func can unlock when session was set to null?
+        var player = &c.player.?;
+
+        const timeline = try player.session.GetTimelineProperties();
+        defer timeline.Release();
+
+        const timestamp = std.time.milliTimestamp();
+
+        player.timeline.last_updated = timestamp;
+        player.timeline.end_time = @divTrunc(timeline.EndTime(), 10000);
+        player.timeline.position = @divTrunc(timeline.Position(), 10000);
     }
 
     fn deinit(c: *Context) void {
-        c.manager.RemoveCurrentSessionChanged(c.tokens.session_changed) catch unreachable;
+        c.manager.RemoveCurrentSessionChanged(c.session_changed) catch unreachable;
 
-        if (c.session) |session| {
-            session.RemoveTimelinePropertiesChanged(c.tokens.timeline_changed.?) catch unreachable;
-            session.Release();
+        if (c.player) |player| {
+            player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
+            player.session.Release();
         }
 
         // wait till all work is done! like in handleSessions and other handles
@@ -105,30 +117,28 @@ const Context = struct {
     };
 
     fn getPlaybackInfo(c: *Context) ?PlaybackInfo {
-        c.mutex.lock();
-        defer c.mutex.unlock();
+        c.lock.lockShared();
+        defer c.lock.unlockShared();
 
-        // perhaps just get timeline props here?
+        const player = c.player orelse return null;
 
-        const session = c.session orelse return null;
-
-        const playback_info = session.GetPlaybackInfo() catch return null;
+        const playback_info = player.session.GetPlaybackInfo() catch return null;
         defer playback_info.Release();
 
         const position = blk: {
             if (playback_info.PlaybackStatus() != .Playing) {
-                break :blk c.timeline.position;
+                break :blk player.timeline.position;
             }
 
             const timestamp = std.time.milliTimestamp();
-            const elapsed = timestamp - c.timeline.last_updated;
+            const elapsed = timestamp - player.timeline.last_updated;
 
-            break :blk c.timeline.position + elapsed;
+            break :blk player.timeline.position + elapsed;
         };
 
         return .{
             .position = position,
-            .end_time = c.timeline.end_time,
+            .end_time = player.timeline.end_time,
         };
     }
 };
@@ -136,8 +146,6 @@ const Context = struct {
 var ctx: Context = undefined;
 
 pub fn setup(gpa: Allocator) !void {
-    std.log.debug("hello from: {}\n", .{std.Thread.getCurrentId()});
-
     try windows.RoInitialize(windows.RO_INIT_MULTITHREADED);
     errdefer windows.RoUninitialize();
 
@@ -146,8 +154,6 @@ pub fn setup(gpa: Allocator) !void {
 }
 
 pub fn cleanup() void {
-    std.log.debug("bye from: {}\n", .{std.Thread.getCurrentId()});
-
     ctx.deinit();
     windows.RoUninitialize();
 }
