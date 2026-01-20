@@ -15,6 +15,7 @@ const y = 1;
 var white_pixel: Image = .{
     .width = 1,
     .height = 1,
+    .format = .r,
     .vtable = &.{
         .destroy = struct {
             fn inner(_: *Image) void {}

@@ -1,7 +1,8 @@
 const std = @import("std");
 const windows = @import("windows.zig");
-const d3d11 = @import("hooks/d3d11.zig");
 const detours = @import("detours.zig");
+const d3d11 = @import("hooks/d3d11.zig");
+const Image = @import("graphics/Image.zig");
 
 const mem = std.mem;
 const unicode = std.unicode;
@@ -29,11 +30,13 @@ pub const Hook = struct {
     attach: *const fn (allocator: Allocator, lib: windows.HMODULE) bool,
     detach: *const fn () void,
     active: *const fn () bool,
+    unload_image: *const fn (img: *Image) void,
 
     pub const Descriptor = struct {
         attach: *const fn (allocator: Allocator, lib: windows.HMODULE) bool,
         detach: *const fn () void,
         active: *const fn () bool,
+        unload_image: *const fn (img: *Image) void,
     };
 
     pub fn define(comptime module: [:0]const u8, desc: Descriptor) Hook {
@@ -43,6 +46,7 @@ pub const Hook = struct {
             .attach = desc.attach,
             .detach = desc.detach,
             .active = desc.active,
+            .unload_image = desc.unload_image,
         };
     }
 };
@@ -134,6 +138,21 @@ pub fn deinit() void {
     }
 
     allocator = undefined;
+}
+
+pub fn broadcastUnloadImage(img: *Image) void {
+    assert(img.ref_count.load(.acquire) == 0);
+    // todo: fix this race condition `hooked` is unsafe!
+    if (!hooked) return;
+
+    hook_mu.lock();
+    defer hook_mu.unlock();
+
+    for (hooks) |hook| {
+        if (hook.active()) {
+            hook.unload_image(img);
+        }
+    }
 }
 
 fn LoadLibraryA(lpLibFileName: windows.LPCSTR) callconv(.winapi) ?windows.HMODULE {

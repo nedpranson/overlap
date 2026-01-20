@@ -23,6 +23,7 @@ pub const interface: hooks.Hook = .define("d3d11.dll", .{
     .attach = &attach,
     .detach = &detach,
     .active = &active,
+    .unload_image = &unloadImage,
 });
 
 const Resource = struct {
@@ -41,10 +42,11 @@ const Instance = struct {
     resources: SynchronizedHashMap(*Image, Resource),
 
     fn deinit(self: *Instance, gpa: Allocator) void {
-        var it = self.resources.map.iterator();
-        while (it.next()) |kv| {
-            kv.value_ptr.deinit();
-            kv.key_ptr.*.remRef();
+        var it = self.resources.valueIterator();
+        defer it.done();
+
+        while (it.next()) |resource| {
+            resource.deinit();
         }
 
         self.resources.deinit(gpa);
@@ -247,21 +249,14 @@ pub fn detach() void {
     zelf = null;
 }
 
-// can be called from any thread
-// very dangerous function
-// maybe have an array list of like unresolved images
-// and after device render we could try to free some of it
-// can be even called when hook is not active
-pub fn unloadImage(id: u32) void {
-    // zelf is not thread safe
+pub fn unloadImage(img: *Image) void {
     const hook = &(zelf orelse return);
 
     var it = hook.instance_map.valueIterator();
     defer it.done();
 
-    while (it.next()) |ins| {
-        // not thread safe still as srv can be needed
-        if (ins.resources.fetchRemove(id)) |res| {
+    while (it.next()) |instance| {
+        if (instance.resources.fetchRemove(img)) |res| {
             res.value.deinit();
         }
     }
@@ -345,7 +340,6 @@ fn Present(
                 @branchHint(.unlikely);
                 const resource = img.loadResource(device);
 
-                img.addRef();
                 result.value_ptr.* = .{
                     .tex = @ptrCast(@alignCast(resource.tex)),
                     .srv = @ptrCast(@alignCast(resource.srv)),

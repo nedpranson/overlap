@@ -11,13 +11,7 @@ interface: Image,
 
 const Static = @This();
 
-pub const Descriptor = struct {
-    width: u32,
-    height: u32,
-    data: []const u8,
-};
-
-pub fn init(gpa: Allocator, d: Descriptor) Allocator.Error!*Image {
+pub fn init(gpa: Allocator, d: Image.Descriptor) Allocator.Error!*Image {
     var static = try gpa.create(Static);
     errdefer gpa.destroy(static);
 
@@ -30,6 +24,7 @@ pub fn init(gpa: Allocator, d: Descriptor) Allocator.Error!*Image {
         .interface = .{
             .width = d.width,
             .height = d.height,
+            .format = d.format,
             .vtable = &.{
                 .destroy = destroy,
                 .update = update,
@@ -64,7 +59,7 @@ fn loadResource(img: *Image, device: *Device) Image.Resource {
         .height = img.height,
         .bytes = static.pixels,
         .is_static = true,
-        .channels = 1,
+        .channels = @intFromEnum(img.format),
     });
 
     return .{

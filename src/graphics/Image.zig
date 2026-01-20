@@ -1,4 +1,5 @@
 const std = @import("std");
+const hooks = @import("../hooks.zig");
 const Device = @import("d3d11.zig").Device;
 
 const atomic = std.atomic;
@@ -10,11 +11,18 @@ pub const Static = @import("images/Static.zig");
 width: u32,
 height: u32,
 
+format: Format,
+
 ref_count: atomic.Value(u32) = .init(1),
 
 vtable: *const VTable,
 
 const Image = @This();
+
+pub const Format = enum(u3) {
+    r = 1,
+    rgba = 4,
+};
 
 // this is more like d3d11 thing
 // opengl, and d3d9 only has texture
@@ -36,15 +44,12 @@ pub const Descriptor = struct {
     width: u32,
     height: u32,
     data: []const u8,
+    format: Format,
 };
 
 pub fn init(gpa: Allocator, d: Descriptor) Allocator.Error!*Image {
-    assert(d.data.len == d.width * d.height);
-    return Static.init(gpa, .{
-        .width = d.width,
-        .height = d.height,
-        .data = d.data,
-    });
+    assert(d.data.len == d.width * d.height * @intFromEnum(d.format));
+    return Static.init(gpa, d);
 }
 
 pub inline fn deinit(img: *Image) void {
@@ -74,6 +79,8 @@ pub fn remRef(img: *Image) void {
 
     if (refs == 1) {
         _ = img.ref_count.load(.acquire);
+
+        hooks.broadcastUnloadImage(img);
         img.vtable.destroy(img);
     }
 }
