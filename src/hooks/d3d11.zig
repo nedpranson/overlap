@@ -43,11 +43,10 @@ const Instance = struct {
 
     fn deinit(self: *Instance, gpa: Allocator) void {
         var it = self.resources.valueIterator();
-        defer it.done();
-
         while (it.next()) |resource| {
             resource.deinit();
         }
+        it.done();
 
         self.resources.deinit(gpa);
         self.device.deinit();
