@@ -83,8 +83,7 @@ const Context = struct {
         c.lock.lock();
         defer c.lock.unlock();
 
-        // this is probs wrong as this func can unlock when session was set to null?
-        var player = &c.player.?;
+        var player = &(c.player orelse return);
 
         const timeline = try player.session.GetTimelineProperties();
         defer timeline.Release();

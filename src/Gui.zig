@@ -2,6 +2,7 @@ const std = @import("std");
 const shared = @import("graphics/shared.zig");
 const Image = @import("graphics/Image.zig");
 const FontRenderer = @import("graphics/FontRenderer.zig");
+const Device = @import("graphics/d3d11.zig").Device;
 
 const unicode = std.unicode;
 
@@ -10,17 +11,35 @@ const Gui = @This();
 const x = 0;
 const y = 1;
 
-var pixel = [1]u8{0xFF};
+// todo: tidy this up!
 var white_pixel: Image = .{
     .width = 1,
     .height = 1,
-    .data = &pixel,
-    .format = .r,
-    .gpa = undefined,
-    .ref_count = .init(1),
-    .mu = .{},
-    .modified = 0,
-    .usage = .static,
+    .vtable = &.{
+        .destroy = struct {
+            fn inner(_: *Image) void {}
+        }.inner,
+        .update = struct {
+            fn inner(_: *Image, _: []const u8) void {
+            }
+        }.inner,
+        .load_resource = struct {
+            fn inner(_: *Image, device: *Device) Image.Resource {
+                const tex, const srv = device.loadImage(.{
+                    .width = 1,
+                    .height = 1,
+                    .bytes = &[1]u8{0xFF},
+                    .is_static = true,
+                    .channels = 1,
+                });
+
+                return .{
+                    .tex = tex,
+                    .srv = srv,
+                };
+            }
+        }.inner,
+    },
 };
 
 draw_commands: std.ArrayList(shared.DrawCommand),
@@ -68,7 +87,7 @@ pub fn rect(gui: *Gui, top: [2]f32, bot: [2]f32, col: u32) void {
         .verticies = &verticies,
         .indecies = &indecies,
         //.image = gui.request_srv(gui.ctx, &white_pixel),
-        .image = undefined,
+        .image = &white_pixel,
     });
 }
 
@@ -96,7 +115,7 @@ pub fn image(gui: *Gui, top: [2]f32, bot: [2]f32, img: *Image) void {
 const DrawCommand = struct {
     verticies: []const shared.DrawVertex,
     indecies: []const u16,
-    image: *anyopaque,
+    image: *Image,
 };
 
 pub const Descriptor = struct {
@@ -161,7 +180,7 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
 
     const reuse_image = blk: {
         const last_draw_cmd = self.draw_commands.getLastOrNull() orelse break :blk false;
-        break :blk last_draw_cmd.srv == draw_cmd.image;
+        break :blk last_draw_cmd.image == draw_cmd.image;
     };
 
     if (!reuse_image) {
@@ -183,8 +202,12 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
         return;
     }
 
+    // need to add ref to prevent image from disapearing
+    // rendering backend (like d3d11) will be responsible to releasing this added ref
+    draw_cmd.image.addRef();
+
     self.draw_commands.appendAssumeCapacity(.{
-        .srv = draw_cmd.image,
+        .image = draw_cmd.image,
         .index_len = @intCast(draw_cmd.indecies.len),
     });
 }

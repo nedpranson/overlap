@@ -38,23 +38,24 @@ const Resource = struct {
 
 const Instance = struct {
     device: graphics.d3d11.Device,
+    resources: SynchronizedHashMap(*Image, Resource),
 
-    //resources: SynchronizedHashMap(*const Image, Resource),
-    //unloaded_resources: SynchronizedArrayList(u32),
+    fn deinit(self: *Instance, gpa: Allocator) void {
+        var it = self.resources.map.iterator();
+        while (it.next()) |kv| {
+            kv.value_ptr.deinit();
+            kv.key_ptr.*.remRef();
+        }
 
-    fn deinit(self: *Instance) void {
-        //var it = self.resources.valueIterator();
-        //defer it.done();
-
-        //while (it.next()) |v| v.deinit();
-
-        //self.resources.deinit(allocator);
+        self.resources.deinit(gpa);
         self.device.deinit();
+
+        self.* = undefined;
     }
 };
 
 allocator: Allocator,
-instance_map: SynchronizedHashMap(*const dxgi.IDXGISwapChain, Instance),
+instance_map: SynchronizedHashMap(*dxgi.IDXGISwapChain, Instance),
 
 var release: *@TypeOf(Release) = undefined;
 var present: *@TypeOf(Present) = undefined;
@@ -168,7 +169,7 @@ pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
 
         var it = hook.instance_map.map.valueIterator();
         while (it.next()) |ins| {
-            ins.deinit();
+            ins.deinit(hook.allocator);
         }
 
         hook.instance_map.deinit(hook.allocator);
@@ -237,7 +238,7 @@ pub fn detach() void {
 
     var it = hook.instance_map.map.valueIterator();
     while (it.next()) |ins| {
-        ins.deinit();
+        ins.deinit(hook.allocator);
     }
 
     hook.instance_map.deinit(hook.allocator);
@@ -279,7 +280,7 @@ fn Release(pSwapChain: *dxgi.IDXGISwapChain) callconv(.winapi) windows.ULONG {
         if (hook.instance_map.fetchRemove(pSwapChain)) |kv| {
             std.debug.print("releasing IDXGISwapChain: {*}\n", .{pSwapChain});
             var instance = kv.value;
-            instance.deinit();
+            instance.deinit(hook.allocator);
         }
     }
 
@@ -298,42 +299,6 @@ const ImageCache = struct {
     srv: *d3d11.ID3D11ShaderResourceView,
     modified: u16,
 };
-
-fn requestSRV(ctx: *anyopaque, img: *Image) *anyopaque {
-    const ins: *Instance = @ptrCast(@alignCast(ctx));
-    const allocator = zelf.?.allocator;
-
-    img.mu.lock();
-    defer img.mu.unlock();
-
-    // todo: handle err
-    const res = ins.resources.getOrPut(allocator, img) catch unreachable;
-    defer res.done();
-
-    // img is still not thread safe as pointer can change any time
-    if (!res.found_existing) {
-        // tood: we can add like a ref to the img here!
-        // to notify that our backend is using this resource and it would be unsafe to release it!
-
-        @branchHint(.unlikely);
-        const tex, const srv = ins.device.loadImage(img);
-
-        res.value_ptr.* = .{
-            .tex = tex,
-            .srv = srv,
-            .modified = img.modified,
-        };
-    }
-
-    if (img.usage == .dynamic) {
-        if (res.value_ptr.modified != img.modified) {
-            ins.device.updateImage(res.value_ptr.tex, img);
-            res.value_ptr.modified = img.modified;
-        }
-    }
-
-    return res.value_ptr.srv;
-}
 
 fn Present(
     pSwapChain: *dxgi.IDXGISwapChain,
@@ -357,6 +322,7 @@ fn Present(
 
             result.value_ptr.* = .{
                 .device = device,
+                .resources = .empty,
             };
         }
 
@@ -368,21 +334,45 @@ fn Present(
         threadlocal var draw_commands: [shared.max_draw_commands]shared.DrawCommand = undefined;
         threadlocal var draw_verticies: [shared.max_verticies]shared.DrawVertex = undefined;
         threadlocal var draw_indicies: [shared.max_indicies]shared.DrawIndex = undefined;
+        
+        fn loadSRV(device: *graphics.d3d11.Device, img: *Image) *anyopaque {
+            var ins: *Instance = @fieldParentPtr("device", device);
+
+            const result = ins.resources.getOrPut(zelf.?.allocator, img) catch unreachable;
+            defer result.done();
+
+            if (!result.found_existing) {
+                @branchHint(.unlikely);
+                const resource = img.loadResource(device);
+
+                img.addRef();
+                result.value_ptr.* = .{
+                    .tex = @ptrCast(@alignCast(resource.tex)),
+                    .srv = @ptrCast(@alignCast(resource.srv)),
+                    .modified = 0,
+                };
+            }
+
+            return result.value_ptr.srv;
+        }
     };
 
     var gui: Gui = .init(
         &static.draw_commands,
         &static.draw_verticies,
         &static.draw_indicies,
-        //&fr,
-        //ins,
-        //&requestSRV,
     );
 
     renderer.render(hook.allocator, &gui);
 
     // todo: on any error we need to unhhok ourselfs
-    instance.device.render(gui.draw_verticies.items, gui.draw_indecies.items, gui.draw_commands.items) catch |err| {
+    instance.device.render(
+        gui.draw_verticies.items,
+        gui.draw_indecies.items,
+        gui.draw_commands.items,
+        static.loadSRV,
+    ) catch |err| {
+        // todo: disable d3d11 hooks on failure
         log.err("Device: failed to render objects: {}", .{err});
     };
 
@@ -401,19 +391,19 @@ fn ResizeBuffers(
 
     if (hook.instance_map.fetchRemove(pSwapChain)) |kv| {
         var instance = kv.value;
-        instance.deinit();
+        instance.deinit(hook.allocator);
     } else {
         return resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
     }
 
     const hr = resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
     if (hr == windows.S_OK) {
-        const device = graphics.d3d11.Device.init(pSwapChain) catch |err| {
+        var device = graphics.d3d11.Device.init(pSwapChain) catch |err| {
             log.err("Device: failed to initialize: {}", .{err});
             return hr;
         };
 
-        hook.instance_map.put(hook.allocator, pSwapChain, .{ .device = device }) catch {
+        hook.instance_map.put(hook.allocator, pSwapChain, .{ .device = device, .resources = .empty }) catch {
             device.deinit();
             return hr;
         };

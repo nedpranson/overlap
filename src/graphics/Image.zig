@@ -1,103 +1,78 @@
 const std = @import("std");
-const math = std.math;
-const atomic = std.atomic;
+const Device = @import("d3d11.zig").Device;
 
+const atomic = std.atomic;
 const Allocator = std.mem.Allocator;
-const Thread = std.Thread;
 const assert = std.debug.assert;
 
-pub const Format = enum(u3) {
-    r = 1,
-    rgba = 4,
-};
+pub const Static = @import("images/Static.zig");
 
-pub const Usage = enum(u1) {
-    static,
-    dynamic,
-};
+width: u32,
+height: u32,
+
+ref_count: atomic.Value(u32) = .init(1),
+
+vtable: *const VTable,
 
 const Image = @This();
+
+// this is more like d3d11 thing
+// opengl, and d3d9 only has texture
+// it seems vulkan has 3 resources
+// but hey this is irrelevant, atleast for now
+pub const Resource = struct {
+    tex: *anyopaque,
+    srv: *anyopaque,
+};
+
+// todo: make load_resource take in like a funciton ptr
+pub const VTable = struct {
+    destroy: *const fn (img: *Image) void,
+    update: *const fn (img: *Image, data: []const u8) void,
+    load_resource: *const fn (img: *Image, device: *Device) Resource,
+};
 
 pub const Descriptor = struct {
     width: u32,
     height: u32,
     data: []const u8,
-    format: Format,
-    usage: Usage = .static,
 };
 
-// todo: we could make Image an interface
-// that would like have Dynamic or Static variants
-
-gpa: Allocator,
-
-width: u32,
-height: u32,
-
-ref_count: atomic.Value(u32),
-
-data: [*]u8,
-modified: u16, // only dynamic uses this
-
-mu: Thread.Mutex, // only dynamic uses this
-
-format: Format,
-usage: Usage,
-
-pub fn init(gpa: Allocator, desc: Descriptor) Allocator.Error!*Image {
-    assert(math.mulWide(u32, desc.width, desc.height) * @intFromEnum(desc.format) == desc.data.len);
-
-    const copy = try gpa.dupe(u8, desc.data);
-    errdefer gpa.free(copy);
-
-    const img = try gpa.create(Image);
-    errdefer gpa.destroy(img);
-
-    img.* = .{
-        .gpa = gpa,
-        .width = desc.width,
-        .height = desc.height,
-        .ref_count = .init(1),
-        .data = copy.ptr,
-        .modified = 0,
-        .mu = .{},
-        .format = desc.format,
-        .usage = desc.usage,
-    };
-
-    return img;
-
+pub fn init(gpa: Allocator, d: Descriptor) Allocator.Error!*Image {
+    return Static.init(gpa, .{
+        .width = d.width,
+        .height = d.height,
+        .data = d.data,
+    });
 }
 
 pub inline fn deinit(img: *Image) void {
-    decRef(img);
+    remRef(img);
 }
 
-pub fn update(img: *Image, data: []const u8) void {
-    assert(math.mulWide(u32, img.width, img.height) * @intFromEnum(img.format) == data.len);
+pub inline fn update(img: *Image, data: []const u8) void {
+    return img.vtable.update(img, data);
+}
 
-    img.mu.lock();
-    defer img.mu.unlock();
-
-    @memcpy(img.data[0..img.width * img.height], data);
-    img.modified += 1;
+pub inline fn loadResource(img: *Image, device: *Device) Resource {
+    return img.vtable.load_resource(img, device);
 }
 
 pub fn addRef(img: *Image) void {
-    assert(img.ref_count.fetchAdd(1, .monotonic) != 0);
+    const refs = img.ref_count.fetchAdd(1, .monotonic);
+    assert(refs != 0);
+
+    std.debug.print("add ref: {d}\n", .{refs + 1});
 }
 
-pub fn decRef(img: *Image) void {
-    const prev_count = img.ref_count.fetchSub(1, .release);
-    assert(prev_count != 0);
+pub fn remRef(img: *Image) void {
+    const refs = img.ref_count.fetchSub(1, .release);
+    assert(refs != 0);
 
-    if (prev_count == 1) {
+    std.debug.print("rem ref: {d}\n", .{refs + 1});
+
+    if (refs == 1) {
         _ = img.ref_count.load(.acquire);
-
-        // todo: boadcast!
-        std.debug.print("freeing the image!!\n", .{});
-
-        img.gpa.free(img.data[0..img.width * img.height]);
-        img.gpa.destroy(img);
+        img.vtable.destroy(img);
     }
 }

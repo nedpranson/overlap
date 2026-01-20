@@ -9,6 +9,9 @@ const d3d11 = windows.d3d11;
 const d3dcommon = windows.d3dcommon;
 const d3dcompiler = windows.d3dcompiler;
 
+// todo: brong back Backend interface oop is not that bad as it seems
+//       guess there is a reason why the world is built on it
+
 const DeviceContextState = struct {
     scissor_rects_len: windows.UINT = 0,
     viewports_len: windows.UINT = 0,
@@ -248,7 +251,7 @@ pub const Device = struct {
         return result;
     }
 
-    pub fn deinit(device: *const Device) void {
+    pub fn deinit(device: *Device) void {
         //device.white_pixel_resource.Release();
         //device.white_pixel_texture.Release();
 
@@ -268,13 +271,16 @@ pub const Device = struct {
 
         device.device_context.Release();
         device.device.Release();
+
+        device.* = undefined;
     }
 
     pub fn render(
-        device: *const Device,
+        device: *Device,
         verticies: []const shared.DrawVertex,
         indecies: []const shared.DrawIndex,
         draw_commands: []const shared.DrawCommand,
+        load_srv: *const fn (device: *Device, img: *Image) *anyopaque,
     ) Error!void {
         var backup_state = DeviceContextState{};
         storeState(device.device_context, &backup_state);
@@ -335,57 +341,67 @@ pub const Device = struct {
         device.device_context.PSSetShader(device.pixel_shader, null);
         device.device_context.PSSetSamplers(0, (&device.sampler)[0..1]);
 
-        var white_pixel_tex: *d3d11.ID3D11Texture2D = undefined;
-        var white_pixel_srv: *d3d11.ID3D11ShaderResourceView = undefined;
+        //var white_pixel_tex: *d3d11.ID3D11Texture2D = undefined;
+        //var white_pixel_srv: *d3d11.ID3D11ShaderResourceView = undefined;
 
-        var texture_desc = mem.zeroes(d3d11.D3D11_TEXTURE2D_DESC);
-        texture_desc.Width = 1;
-        texture_desc.Height = 1;
-        texture_desc.MipLevels = 1;
-        texture_desc.ArraySize = 1;
-        texture_desc.Format = dxgi.DXGI_FORMAT_R8_UNORM;
-        texture_desc.SampleDesc.Count = 1;
-        texture_desc.Usage = d3d11.D3D11_USAGE_DEFAULT;
-        texture_desc.BindFlags = d3d11.D3D11_BIND_SHADER_RESOURCE;
+        //var texture_desc = mem.zeroes(d3d11.D3D11_TEXTURE2D_DESC);
+        //texture_desc.Width = 1;
+        //texture_desc.Height = 1;
+        //texture_desc.MipLevels = 1;
+        //texture_desc.ArraySize = 1;
+        //texture_desc.Format = dxgi.DXGI_FORMAT_R8_UNORM;
+        //texture_desc.SampleDesc.Count = 1;
+        //texture_desc.Usage = d3d11.D3D11_USAGE_DEFAULT;
+        //texture_desc.BindFlags = d3d11.D3D11_BIND_SHADER_RESOURCE;
 
-        var initial_data = mem.zeroes(d3d11.D3D11_SUBRESOURCE_DATA);
-        initial_data.pSysMem = &[1]u8{0xFF};
-        initial_data.SysMemPitch = 1;
+        //var initial_data = mem.zeroes(d3d11.D3D11_SUBRESOURCE_DATA);
+        //initial_data.pSysMem = &[1]u8{0xFF};
+        //initial_data.SysMemPitch = 1;
 
-        try device.device.CreateTexture2D(&texture_desc, &initial_data, &white_pixel_tex);
-        defer white_pixel_tex.Release();
+        //try device.device.CreateTexture2D(&texture_desc, &initial_data, &white_pixel_tex);
+        //defer white_pixel_tex.Release();
 
-        try device.device.CreateShaderResourceView(@ptrCast(white_pixel_tex), null, &white_pixel_srv);
-        defer white_pixel_srv.Release();
+        //try device.device.CreateShaderResourceView(@ptrCast(white_pixel_tex), null, &white_pixel_srv);
+        //defer white_pixel_srv.Release();
 
         var index_off: windows.UINT = 0;
         for (draw_commands) |cmd| {
-            //const srv: *d3d11.ID3D11ShaderResourceView = @ptrCast(@alignCast(cmd.srv));
+            const srv: *d3d11.ID3D11ShaderResourceView = @ptrCast(@alignCast(load_srv(device, cmd.image)));
+            defer cmd.image.remRef();
 
-            device.device_context.PSSetShaderResources(0, (&white_pixel_srv)[0..1]);
+            device.device_context.PSSetShaderResources(0, (&srv)[0..1]);
             device.device_context.DrawIndexed(@intCast(cmd.index_len), index_off, 0); // todo: use third argument
 
             index_off += @intCast(cmd.index_len);
         }
     }
 
-    pub fn loadImage(device: *const Device, img: *Image) struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView } {
+    pub const Descriptor = struct {
+        width: u32,
+        height: u32,
+
+        bytes: [*]const u8,
+
+        is_static: bool,
+        channels: u3,
+    };
+
+    pub fn loadImage(device: *Device, d: Descriptor) struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView } {
         var tex: *d3d11.ID3D11Texture2D = undefined;
         var srv: *d3d11.ID3D11ShaderResourceView = undefined;
 
-        const static = img.usage == .static;
-
-        const format: windows.INT = switch (img.format) {
-            .r => dxgi.DXGI_FORMAT_R8_UNORM,
-            .rgba => dxgi.DXGI_FORMAT_R8G8B8A8_UNORM,
+        const format: windows.INT = switch (d.channels) {
+            1 => dxgi.DXGI_FORMAT_R8_UNORM,
+            4 => dxgi.DXGI_FORMAT_R8G8B8A8_UNORM,
+            else => unreachable,
         };
 
-        const usage: windows.INT = if (static) d3d11.D3D11_USAGE_DEFAULT else d3d11.D3D11_USAGE_DYNAMIC;
-        const cpu_flags: windows.UINT = if (static) 0 else d3d11.D3D11_CPU_ACCESS_WRITE;
+        const usage: windows.INT = if (d.is_static) d3d11.D3D11_USAGE_DEFAULT else d3d11.D3D11_USAGE_DYNAMIC;
+        const cpu_flags: windows.UINT = if (d.is_static) 0 else d3d11.D3D11_CPU_ACCESS_WRITE;
 
         var texture_desc = mem.zeroes(d3d11.D3D11_TEXTURE2D_DESC);
-        texture_desc.Width = img.width;
-        texture_desc.Height = img.height;
+        texture_desc.Width = d.width;
+        texture_desc.Height = d.height;
         texture_desc.MipLevels = 1;
         texture_desc.ArraySize = 1;
         texture_desc.Format = format;
@@ -394,10 +410,10 @@ pub const Device = struct {
         texture_desc.BindFlags = d3d11.D3D11_BIND_SHADER_RESOURCE;
         texture_desc.CPUAccessFlags = cpu_flags;
 
-        if (static) {
+        if (d.is_static) {
             var initial_data = mem.zeroes(d3d11.D3D11_SUBRESOURCE_DATA);
-            initial_data.pSysMem = img.data;
-            initial_data.SysMemPitch = img.width * @intFromEnum(img.format);
+            initial_data.pSysMem = d.bytes;
+            initial_data.SysMemPitch = d.width * d.channels;
 
             // todo: handle err
             device.device.CreateTexture2D(&texture_desc, &initial_data, &tex) catch unreachable;
@@ -413,7 +429,7 @@ pub const Device = struct {
             device.device_context.Map(@ptrCast(tex), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource) catch unreachable;
             defer device.device_context.Unmap(@ptrCast(tex), 0);
 
-            mapped_resource.write(u8, img.data[0..img.width * img.height], img.width * @intFromEnum(img.format));
+            mapped_resource.write(u8, d.bytes[0..d.width * d.height], d.width * d.channels);
             errdefer tex.Release();
         }
         errdefer tex.Release();
@@ -425,7 +441,7 @@ pub const Device = struct {
         return .{ tex, srv };
     }
 
-    pub fn updateImage(device: *const Device, tex: *d3d11.ID3D11Texture2D, img: *const Image) void {
+    pub fn updateImage(device: *Device, tex: *d3d11.ID3D11Texture2D, img: *const Image) void {
         var mapped_resource: d3d11.D3D11_MAPPED_SUBRESOURCE = undefined;
 
         // todo: catch errors
