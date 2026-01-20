@@ -1,7 +1,7 @@
 const std = @import("std");
 const windows = @import("windows.zig");
 const Gui = @import("Gui.zig");
-//const Image = @import("graphics/Image.zig");
+const Image = @import("graphics/Image.zig");
 
 const unicode = std.unicode;
 const mem = std.mem;
@@ -21,6 +21,8 @@ const Context = struct {
     const Player = struct {
         session: windows.GlobalSystemMediaTransportControlsSession,
         timeline_changed: i64,
+
+        cover: ?*Image,
 
         timeline: struct {
             last_updated: i64,
@@ -54,6 +56,11 @@ const Context = struct {
         if (c.player) |player| {
             player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
             player.session.Release();
+
+            if (player.cover) |cover| {
+                cover.deinit();
+            }
+
             c.player = null;
         }
 
@@ -61,6 +68,12 @@ const Context = struct {
         var player: Player = .{ 
             .session = session,
             .timeline_changed = undefined,
+            .cover = try Image.init(c.gpa, .{
+                .width = 2,
+                .height = 2,
+                .data = &[4]u8{0xFF, 0x00, 0x00, 0xFF},
+                .format = .r,
+            }),
             .timeline = undefined,
         };
         
@@ -111,6 +124,7 @@ const Context = struct {
     }
 
     const PlaybackInfo = struct {
+        cover: ?*Image,
         position: i64,
         end_time: i64,
     };
@@ -135,7 +149,13 @@ const Context = struct {
             break :blk player.timeline.position + elapsed;
         };
 
+        // tood: fix cuz this is just cursed
+        if (player.cover) |cover| {
+            cover.addRef();
+        }
+
         return .{
+            .cover = player.cover,
             .position = position,
             .end_time = player.timeline.end_time,
         };
@@ -159,6 +179,7 @@ pub fn cleanup() void {
 
 pub fn render(gui: *Gui) void {
     const playback_info = ctx.getPlaybackInfo() orelse return;
+    defer if (playback_info.cover) |cover| { cover.remRef(); }; // todo: yea no!
 
     const x = 0;
     const y = 1;
@@ -182,5 +203,9 @@ pub fn render(gui: *Gui) void {
         // making it smoother
         const col = 0x00DFA200 + @as(u32, @intFromFloat(fraction * 255.0));
         gui.rect(.{ -1.0 + pos[x] + @floor(bar_width), pos[y] + image_size }, .{ -1.0 + pos[x] + @floor(bar_width) + 1.0, pos[y] + image_size + 1.0 }, col);
+    }
+
+    if (playback_info.cover) |cover| {
+        gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, cover);
     }
 }

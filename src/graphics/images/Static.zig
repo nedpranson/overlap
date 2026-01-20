@@ -5,7 +5,7 @@ const Device = @import("../d3d11.zig").Device;
 const Allocator = std.mem.Allocator;
 
 gpa: Allocator,
-pixels: []u8,
+pixels: [*]u8,
 
 interface: Image,
 
@@ -20,7 +20,7 @@ pub fn init(gpa: Allocator, d: Image.Descriptor) Allocator.Error!*Image {
 
     static.* = .{
         .gpa = gpa,
-        .pixels = pixels,
+        .pixels = pixels.ptr,
         .interface = .{
             .width = d.width,
             .height = d.height,
@@ -39,7 +39,9 @@ pub fn init(gpa: Allocator, d: Image.Descriptor) Allocator.Error!*Image {
 fn destroy(img: *Image) void {
     const static: *Static = @alignCast(@fieldParentPtr("interface", img));
 
-    static.gpa.free(static.pixels);
+    std.debug.print("destroying static image: {*}\n", .{static});
+
+    static.gpa.free(static.pixels[0..img.width * img.height]);
     static.gpa.destroy(static);
 
     static.* = undefined;

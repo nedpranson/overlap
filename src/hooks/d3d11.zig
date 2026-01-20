@@ -64,14 +64,8 @@ var resize_buffers: *@TypeOf(ResizeBuffers) = undefined;
 
 var zelf: ?@This() = null;
 
-// todo: make it global or sum
-// var fr: @import("../graphics/FontRenderer.zig") = undefined;
-
 pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
     assert(zelf == null);
-
-    // todo: implement valid global! font renderer
-    //fr = @import("../graphics/FontRenderer.zig").init(std.heap.page_allocator) catch return false;
 
     windows.AllocConsole() catch {};
 
@@ -261,7 +255,6 @@ pub fn unloadImage(img: *Image) void {
     }
 }
 
-// todo: need to make this threadsafe!!!
 pub fn active() bool {
     return zelf != null;
 }
@@ -280,19 +273,6 @@ fn Release(pSwapChain: *dxgi.IDXGISwapChain) callconv(.winapi) windows.ULONG {
 
     return refs;
 }
-
-// point is so we that we only pass instructions what and where to draw
-// and it is up to the backend/hook impl to draw it
-
-// for handling image resources we can do like
-// key as ptr to Image
-// and we can add an event like make/destroy image and do some stuff based on it idk
-
-const ImageCache = struct {
-    tex: *d3d11.ID3D11Texture2D,
-    srv: *d3d11.ID3D11ShaderResourceView,
-    modified: u16,
-};
 
 fn Present(
     pSwapChain: *dxgi.IDXGISwapChain,

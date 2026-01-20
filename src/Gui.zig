@@ -87,7 +87,6 @@ pub fn rect(gui: *Gui, top: [2]f32, bot: [2]f32, col: u32) void {
     gui.addDrawCommand(.{
         .verticies = &verticies,
         .indecies = &indecies,
-        //.image = gui.request_srv(gui.ctx, &white_pixel),
         .image = &white_pixel,
     });
 }
@@ -109,7 +108,7 @@ pub fn image(gui: *Gui, top: [2]f32, bot: [2]f32, img: *Image) void {
     gui.addDrawCommand(.{
         .verticies = &verticies,
         .indecies = &indecies,
-        .image = gui.request_srv(gui.ctx, img),
+        .image = img,
     });
 }
 

@@ -67,15 +67,11 @@ pub inline fn loadResource(img: *Image, device: *Device) Resource {
 pub fn addRef(img: *Image) void {
     const refs = img.ref_count.fetchAdd(1, .monotonic);
     assert(refs != 0);
-
-    std.debug.print("add ref: {d}\n", .{refs + 1});
 }
 
 pub fn remRef(img: *Image) void {
     const refs = img.ref_count.fetchSub(1, .release);
     assert(refs != 0);
-
-    std.debug.print("rem ref: {d}\n", .{refs - 1});
 
     if (refs == 1) {
         _ = img.ref_count.load(.acquire);
