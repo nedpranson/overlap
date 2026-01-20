@@ -112,7 +112,7 @@ const Context = struct {
     }
 
     fn handleProperties(c: *Context, _: windows.GlobalSystemMediaTransportControlsSession) !void {
-        // todo: we should reduce our locks as there 
+        // todo: we should reduce our locks as there
         //       random longer locks can cauze some frame drops
         //       as render thread will wait till this func rasterizes cover image and stuff
         c.lock.lock();

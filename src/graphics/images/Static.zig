@@ -5,7 +5,7 @@ const Device = @import("../d3d11.zig").Device;
 const Allocator = std.mem.Allocator;
 
 gpa: Allocator,
-pixels: [*]u8,
+pixels: [*]const u8,
 
 interface: Image,
 
@@ -41,7 +41,7 @@ fn destroy(img: *Image) void {
 
     std.debug.print("destroying static image: {*}\n", .{static});
 
-    static.gpa.free(static.pixels[0..img.width * img.height]);
+    static.gpa.free(static.pixels[0..img.width * img.height * @intFromEnum(img.format)]);
     static.gpa.destroy(static);
 
     static.* = undefined;
