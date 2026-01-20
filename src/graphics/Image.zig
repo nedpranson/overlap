@@ -39,6 +39,7 @@ pub const Descriptor = struct {
 };
 
 pub fn init(gpa: Allocator, d: Descriptor) Allocator.Error!*Image {
+    assert(d.data.len == d.width * d.height);
     return Static.init(gpa, .{
         .width = d.width,
         .height = d.height,
@@ -69,7 +70,7 @@ pub fn remRef(img: *Image) void {
     const refs = img.ref_count.fetchSub(1, .release);
     assert(refs != 0);
 
-    std.debug.print("rem ref: {d}\n", .{refs + 1});
+    std.debug.print("rem ref: {d}\n", .{refs - 1});
 
     if (refs == 1) {
         _ = img.ref_count.load(.acquire);
