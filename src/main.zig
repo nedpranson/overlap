@@ -20,7 +20,9 @@ const Context = struct {
 
     const Player = struct {
         session: windows.GlobalSystemMediaTransportControlsSession,
+
         timeline_changed: i64,
+        properties_changed: i64,
 
         cover: ?*Image,
 
@@ -68,14 +70,12 @@ const Context = struct {
         var player: Player = .{ 
             .session = session,
             .timeline_changed = undefined,
-            .cover = try Image.init(c.gpa, .{
-                .width = 2,
-                .height = 2,
-                .data = &[4]u8{0xFF, 0x00, 0x00, 0xFF},
-                .format = .r,
-            }),
+            .properties_changed = undefined,
+            .cover = null,
             .timeline = undefined,
         };
+
+        // todo: tidy everything here
         
         const timeline = try session.GetTimelineProperties();
         defer timeline.Release();
@@ -88,6 +88,9 @@ const Context = struct {
 
         player.timeline_changed = try session.TimelinePropertiesChanged(c.gpa, c, handleTimeline);
         errdefer player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
+
+        player.properties_changed = try session.MediaPropertiesChanged(c.gpa, c, handleProperties);
+        // todo: remove!!! props changed 
 
         c.player = player;
     }
@@ -108,12 +111,99 @@ const Context = struct {
         player.timeline.position = @divTrunc(timeline.Position(), 10000);
     }
 
+    fn handleProperties(c: *Context, _: windows.GlobalSystemMediaTransportControlsSession) !void {
+        // todo: we should reduce our locks as there 
+        //       random longer locks can cauze some frame drops
+        //       as render thread will wait till this func rasterizes cover image and stuff
+        c.lock.lock();
+        defer c.lock.unlock();
+
+        var player = &(c.player orelse return);
+
+        // todo: update like artist and stuff
+
+        if (player.cover) |cover| {
+            // todo: think is deinit call is even clear as it just decRef this call is like hidden behaviour
+            cover.deinit();
+            player.cover = null;
+        }
+
+        const properties = try (try player.session.TryGetMediaPropertiesAsync()).getAndForget(c.gpa);
+        defer properties.Release();
+
+        const thumbnail = (try properties.Thumbnail()) orelse return;
+        defer thumbnail.Release();
+
+        const stream = try (try thumbnail.OpenReadAsync()).getAndForget(c.gpa);
+        defer stream.Release();
+
+        const decoder = try (try windows.BitmapDecoder.CreateAsync(@ptrCast(stream))).getAndForget(c.gpa);
+        defer decoder.Release();
+
+        const frame = try (try decoder.GetFrameAsync(0)).getAndForget(c.gpa);
+        defer frame.Release();
+
+        const transform = try windows.IBitmapTransform.new();
+        defer transform.Release();
+
+        transform.put_InterpolationMode(.Fant);
+
+        const spotify_packaged_id = unicode.utf8ToUtf16LeStringLiteral("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify");
+        const spotify_unpackaged_id = unicode.utf8ToUtf16LeStringLiteral("Spotify.exe");
+
+        const model_id = try player.session.SourceAppUserModelId();
+
+        // crops out Spotifies branding from original thumbnail's image.
+        if (mem.eql(u16, model_id, spotify_packaged_id) or mem.eql(u16, model_id, spotify_unpackaged_id)) {
+            // Perhaps this solution does not look so great, but I think it is the best option.
+
+            transform.put_ScaledHeight(@intFromFloat(64.0 * 1.2821));
+            transform.put_ScaledWidth(@intFromFloat(64.0 * 1.2821));
+
+            transform.put_Bounds(.{
+                .X = @intFromFloat(0.11 * 1.2821 * 64.0),
+                .Y = 0,
+                .Width = 64,
+                .Height = 64,
+            });
+        } else {
+            transform.put_ScaledHeight(64);
+            transform.put_ScaledWidth(64);
+        }
+
+        // todo: handle like non square ones
+
+        const pixels = try (try frame.GetPixelDataTransformedAsync(
+                windows.BitmapPixelFormat_Rgba8,
+                windows.BitmapAlphaMode_Premultiplied,
+                transform,
+                windows.ExifOrientationMode_IgnoreExifOrientation,
+                windows.ColorManagementMode_DoNotColorManage,
+        )).getAndForget(c.gpa);
+        defer pixels.Release();
+
+        var ptr: [*]const u8 = undefined;
+        var len: u32 = undefined;
+        pixels.DetachPixelData(&len, &ptr); // todo: add PixelDataProvider
+
+        player.cover = try .init(c.gpa, .{
+            .width = 64,
+            .height = 64,
+            .data = ptr[0..len],
+            .format = .rgba,
+        });
+    }
+
     fn deinit(c: *Context) void {
         c.manager.RemoveCurrentSessionChanged(c.session_changed) catch unreachable;
 
         if (c.player) |player| {
             player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
             player.session.Release();
+
+            if (player.cover) |cover| {
+                cover.deinit();
+            }
         }
 
         // wait till all work is done! like in handleSessions and other handles
@@ -123,10 +213,17 @@ const Context = struct {
         c.* = undefined;
     }
 
+    // tood: add like default cover
     const PlaybackInfo = struct {
         cover: ?*Image,
         position: i64,
         end_time: i64,
+
+        pub fn deinit(info: PlaybackInfo) void {
+            if (info.cover) |cover| {
+                cover.remRef();
+            }
+        }
     };
 
     fn getPlaybackInfo(c: *Context) ?PlaybackInfo {
@@ -149,7 +246,6 @@ const Context = struct {
             break :blk player.timeline.position + elapsed;
         };
 
-        // tood: fix cuz this is just cursed
         if (player.cover) |cover| {
             cover.addRef();
         }
@@ -179,7 +275,7 @@ pub fn cleanup() void {
 
 pub fn render(gui: *Gui) void {
     const playback_info = ctx.getPlaybackInfo() orelse return;
-    defer if (playback_info.cover) |cover| { cover.remRef(); }; // todo: yea no!
+    defer playback_info.deinit();
 
     const x = 0;
     const y = 1;
