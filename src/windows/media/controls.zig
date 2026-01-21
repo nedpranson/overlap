@@ -305,6 +305,25 @@ pub const IGlobalSystemMediaTransportControlsSession = extern struct {
             else => windows.unexpectedError(windows.HRESULT_CODE(hr)),
         };
     }
+
+    pub const RemoveMediaPropertiesChangedError = error{
+        Unexpected,
+    };
+
+    pub fn remove_MediaPropertiesChanged(
+        self: *IGlobalSystemMediaTransportControlsSession,
+        token: EventRegistrationToken,
+    ) RemoveMediaPropertiesChangedError!void {
+        const FnType = fn (*IGlobalSystemMediaTransportControlsSession, EventRegistrationToken) callconv(.winapi) HRESULT;
+
+        const remove_media_proparties_changed: *const FnType = @ptrCast(self.vtable[30]);
+        const hr = remove_media_proparties_changed(self, token);
+
+        return switch (hr) {
+            windows.S_OK => {},
+            else => windows.unexpectedError(windows.HRESULT_CODE(hr)),
+        };
+    }
 };
 
 // prob add those GlobalSystemMediaTransportControlsSessionManager classes for general use

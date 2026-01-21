@@ -2,25 +2,14 @@ const std = @import("std");
 const Image = @import("../Image.zig");
 const Device = @import("../d3d11.zig").Device;
 
-const Allocator = std.mem.Allocator;
-
-gpa: Allocator,
 pixels: [*]const u8,
-
 interface: Image,
 
-const Static = @This();
+const View = @This();
 
-pub fn init(gpa: Allocator, d: Image.Descriptor) Allocator.Error!*Image {
-    var static = try gpa.create(Static);
-    errdefer gpa.destroy(static);
-
-    const pixels = try gpa.dupe(u8, d.data);
-    errdefer gpa.free(pixels);
-
-    static.* = .{
-        .gpa = gpa,
-        .pixels = pixels.ptr,
+pub fn init(d: Image.Descriptor) View {
+    return .{
+        .pixels = d.data.ptr,
         .interface = .{
             .width = d.width,
             .height = d.height,
@@ -33,15 +22,9 @@ pub fn init(gpa: Allocator, d: Image.Descriptor) Allocator.Error!*Image {
             },
         },
     };
-
-    return &static.interface;
 }
 
-fn destroy(img: *Image) void {
-    const static: *Static = @alignCast(@fieldParentPtr("interface", img));
-
-    static.gpa.free(static.pixels[0..img.width * img.height * @intFromEnum(img.format)]);
-    static.gpa.destroy(static);
+fn destroy(_: *Image) void {
 }
 
 fn update(img: *Image, pixels: []const u8) void {
@@ -51,12 +34,12 @@ fn update(img: *Image, pixels: []const u8) void {
 }
 
 fn loadResource(img: *Image, device: *Device) Device.Error!Image.Resource {
-    const static: *Static = @alignCast(@fieldParentPtr("interface", img));
+    const view: *View = @alignCast(@fieldParentPtr("interface", img));
 
     const tex, const srv = try device.loadImage(.{
         .width = img.width,
         .height = img.height,
-        .bytes = static.pixels,
+        .bytes = view.pixels,
         .is_static = true,
         .channels = @intFromEnum(img.format),
     });

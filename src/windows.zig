@@ -1199,6 +1199,10 @@ pub const GlobalSystemMediaTransportControlsSession = struct {
 
         return (try self.handle.add_MediaPropertiesChanged(handler)).value;
     }
+
+    pub inline fn RemoveMediaPropertiesChanged(self: GlobalSystemMediaTransportControlsSession, token: i64) !void {
+        return self.handle.remove_MediaPropertiesChanged(.{ .value = token });
+    }
 };
 
 pub const GlobalSystemMediaTransportControlsSessionMediaProperties = extern struct {

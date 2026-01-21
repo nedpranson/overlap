@@ -386,7 +386,7 @@ pub const Device = struct {
         channels: u3,
     };
 
-    pub fn loadImage(device: *Device, d: Descriptor) struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView } {
+    pub fn loadImage(device: *Device, d: Descriptor) Error!struct { *d3d11.ID3D11Texture2D, *d3d11.ID3D11ShaderResourceView } {
         var tex: *d3d11.ID3D11Texture2D = undefined;
         var srv: *d3d11.ID3D11ShaderResourceView = undefined;
 
@@ -415,18 +415,15 @@ pub const Device = struct {
             initial_data.pSysMem = d.bytes;
             initial_data.SysMemPitch = d.width * d.channels;
 
-            // todo: handle err
-            device.device.CreateTexture2D(&texture_desc, &initial_data, &tex) catch unreachable;
+            try device.device.CreateTexture2D(&texture_desc, &initial_data, &tex);
             errdefer tex.Release();
         } else {
-            // todo: handle err
-            device.device.CreateTexture2D(&texture_desc, null, &tex) catch unreachable;
+            try device.device.CreateTexture2D(&texture_desc, null, &tex);
             errdefer tex.Release();
 
             var mapped_resource: d3d11.D3D11_MAPPED_SUBRESOURCE = undefined;
 
-            // todo: handle err
-            device.device_context.Map(@ptrCast(tex), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource) catch unreachable;
+            try device.device_context.Map(@ptrCast(tex), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource);
             defer device.device_context.Unmap(@ptrCast(tex), 0);
 
             mapped_resource.write(u8, d.bytes[0..d.width * d.height * d.channels], d.width * d.channels);
@@ -434,18 +431,16 @@ pub const Device = struct {
         }
         errdefer tex.Release();
 
-        // todo: handle
-        device.device.CreateShaderResourceView(@ptrCast(tex), null, &srv) catch unreachable;
+        try device.device.CreateShaderResourceView(@ptrCast(tex), null, &srv);
         errdefer srv.Release();
 
         return .{ tex, srv };
     }
 
-    pub fn updateImage(device: *Device, tex: *d3d11.ID3D11Texture2D, d: Descriptor) void {
+    pub fn updateImage(device: *Device, tex: *d3d11.ID3D11Texture2D, d: Descriptor) Error!void {
         var mapped_resource: d3d11.D3D11_MAPPED_SUBRESOURCE = undefined;
 
-        // todo: catch errors
-        device.device_context.Map(@ptrCast(tex), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource) catch unreachable;
+        try device.device_context.Map(@ptrCast(tex), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource);
         defer device.device_context.Unmap(@ptrCast(tex), 0);
 
         mapped_resource.write(u8, d.bytes[0..d.width * d.height * d.channels], d.width * d.channels);

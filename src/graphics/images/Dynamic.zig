@@ -34,8 +34,8 @@ pub fn init(gpa: Allocator, d: Image.Descriptor) Allocator.Error!*Image {
             .vtable = &.{
                 .destroy = destroy,
                 .update = update,
-                .sync_resource = syncResource,
                 .load_resource = loadResource,
+                .sync_resource = syncResource,
             },
         },
     };
@@ -62,35 +62,13 @@ fn update(img: *Image, pixels: []const u8) void {
     dynamic.revision +%= 1;
 }
 
-fn syncResource(img: *Image, device: *Device, cache: *Image.Resource) void {
+fn loadResource(img: *Image, device: *Device) Device.Error!Image.Resource {
     const dynamic: *Dynamic = @alignCast(@fieldParentPtr("interface", img));
 
     dynamic.lock.lock();
     defer dynamic.lock.unlock();
 
-    if (cache.revision == dynamic.revision) {
-        return;
-    }
-
-    std.debug.print("updating backend image!\n", .{});
-
-    device.updateImage(@ptrCast(@alignCast(cache.tex)), .{
-        .width = img.width,
-        .height = img.height,
-        .bytes = dynamic.pixels,
-        .is_static = false,
-        .channels = @intFromEnum(img.format),
-    });
-    cache.revision = dynamic.revision;
-}
-
-fn loadResource(img: *Image, device: *Device) Image.Resource {
-    const dynamic: *Dynamic = @alignCast(@fieldParentPtr("interface", img));
-
-    dynamic.lock.lock();
-    defer dynamic.lock.unlock();
-
-    const tex, const srv = device.loadImage(.{
+    const tex, const srv = try device.loadImage(.{
         .width = img.width,
         .height = img.height,
         .bytes = dynamic.pixels,
@@ -103,4 +81,24 @@ fn loadResource(img: *Image, device: *Device) Image.Resource {
         .srv = srv,
         .revision = dynamic.revision,
     };
+}
+
+fn syncResource(img: *Image, device: *Device, cache: *Image.Resource) Device.Error!void {
+    const dynamic: *Dynamic = @alignCast(@fieldParentPtr("interface", img));
+
+    dynamic.lock.lock();
+    defer dynamic.lock.unlock();
+
+    if (cache.revision == dynamic.revision) {
+        return;
+    }
+
+    try device.updateImage(@ptrCast(@alignCast(cache.tex)), .{
+        .width = img.width,
+        .height = img.height,
+        .bytes = dynamic.pixels,
+        .is_static = false,
+        .channels = @intFromEnum(img.format),
+    });
+    cache.revision = dynamic.revision;
 }

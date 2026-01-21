@@ -8,6 +8,7 @@ const assert = std.debug.assert;
 
 pub const Static = @import("images/Static.zig");
 pub const Dynamic = @import("images/Dynamic.zig");
+pub const View = @import("images/View.zig");
 
 width: u32,
 height: u32,
@@ -39,8 +40,8 @@ pub const Resource = struct {
 pub const VTable = struct {
     destroy: *const fn (img: *Image) void,
     update: *const fn (img: *Image, data: []const u8) void,
-    load_resource: *const fn (img: *Image, device: *Device) Resource,
-    sync_resource: *const fn (img: *Image, device: *Device, cache: *Resource) void,
+    load_resource: *const fn (img: *Image, device: *Device) Device.Error!Resource,
+    sync_resource: *const fn (img: *Image, device: *Device, cache: *Resource) Device.Error!void,
 };
 
 pub const Usage = enum {
@@ -72,12 +73,12 @@ pub inline fn update(img: *Image, pixels: []const u8) void {
     return img.vtable.update(img, pixels);
 }
 
-pub inline fn loadResource(img: *Image, device: *Device) Resource {
+pub inline fn loadResource(img: *Image, device: *Device) Device.Error!Resource {
     return img.vtable.load_resource(img, device);
 }
 
 
-pub inline fn syncResource(img: *Image, device: *Device, cache: *Resource) void {
+pub inline fn syncResource(img: *Image, device: *Device, cache: *Resource) Device.Error!void {
     return img.vtable.sync_resource(img, device, cache);
 }
 

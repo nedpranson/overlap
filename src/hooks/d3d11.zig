@@ -303,16 +303,19 @@ fn Present(
         fn loadSRV(device: *graphics.d3d11.Device, img: *Image) *anyopaque {
             var ins: *Instance = @fieldParentPtr("device", device);
 
+            // todo: handle err!
             const result = ins.resources.getOrPut(zelf.?.allocator, img) catch unreachable;
             defer result.done();
 
             if (!result.found_existing) {
                 @branchHint(.unlikely);
 
-                const resource = img.loadResource(device);
+                // todo: handle err!
+                const resource = img.loadResource(device) catch unreachable;
                 result.value_ptr.* = resource;
             } else {
-                img.syncResource(device, result.value_ptr);
+                // todo: handle err!
+                img.syncResource(device, result.value_ptr) catch unreachable;
             }
 
             return result.value_ptr.srv;

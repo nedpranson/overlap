@@ -68,6 +68,7 @@ const Context = struct {
 
         if (c.player) |player| {
             player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
+            player.session.RemoveMediaPropertiesChanged(player.properties_changed) catch unreachable;
             player.session.Release();
 
             c.player = null;
@@ -96,7 +97,7 @@ const Context = struct {
         errdefer player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
 
         player.properties_changed = try session.MediaPropertiesChanged(c.gpa, c, handleProperties);
-        // todo: remove!!! props changed 
+        errdefer player.session.RemoveMediaPropertiesChanged(player.properties_changed);
 
         c.player = player;
     }
@@ -118,7 +119,7 @@ const Context = struct {
     }
 
     fn handleProperties(c: *Context, _: windows.GlobalSystemMediaTransportControlsSession) !void {
-        // todo: we should reduce our locks as there
+        // todo: we should reduce our locks as these
         //       random longer locks can cauze some frame drops
         //       as render thread will wait till this func rasterizes cover image and stuff
         c.lock.lock();
@@ -203,6 +204,7 @@ const Context = struct {
 
         if (c.player) |player| {
             player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
+            player.session.RemoveMediaPropertiesChanged(player.properties_changed) catch unreachable;
             player.session.Release();
         }
 
@@ -271,7 +273,7 @@ pub fn render(gui: *Gui) void {
     const x = 0;
     const y = 1;
 
-    const pos = &[2]f32{ 24.0, 24.0 };
+    const pos = [2]f32{ 24.0, 24.0 };
 
     const image_size = 64.0;
     const padding = 16.0;

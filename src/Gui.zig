@@ -1,7 +1,6 @@
 const std = @import("std");
 const shared = @import("graphics/shared.zig");
 const Image = @import("graphics/Image.zig");
-const FontRenderer = @import("graphics/FontRenderer.zig");
 const Device = @import("graphics/d3d11.zig").Device;
 
 const unicode = std.unicode;
@@ -11,68 +10,27 @@ const Gui = @This();
 const x = 0;
 const y = 1;
 
-// todo: tidy this up!
-var white_pixel: Image = .{
+var white_pixel: Image.View = .init(.{
     .width = 1,
     .height = 1,
+    .data = &.{0xFF},
     .format = .r,
-    .vtable = &.{
-        .destroy = struct {
-            fn inner(_: *Image) void {}
-        }.inner,
-        .update = struct {
-            fn inner(_: *Image, _: []const u8) void {
-            }
-        }.inner,
-        .load_resource = struct {
-            fn inner(_: *Image, device: *Device) Image.Resource {
-                const tex, const srv = device.loadImage(.{
-                    .width = 1,
-                    .height = 1,
-                    .bytes = &[1]u8{0xFF},
-                    .is_static = true,
-                    .channels = 1,
-                });
-
-                return .{
-                    .tex = tex,
-                    .srv = srv,
-                    .revision = 0,
-                };
-            }
-        }.inner,
-        .sync_resource = struct {
-            fn inner(_: *Image, _: *Device, _: *Image.Resource) void {
-            }
-        }.inner,
-    },
-};
+});
 
 draw_commands: std.ArrayList(shared.DrawCommand),
 
 draw_verticies: std.ArrayList(shared.DrawVertex),
 draw_indecies: std.ArrayList(shared.DrawIndex),
 
-//font_renderer: *FontRenderer,
-
-//ctx: *anyopaque,
-//request_srv: *const fn(ctx: *anyopaque, img: *Image) *anyopaque,
-
 pub fn init(
     draw_commands: []shared.DrawCommand,
     draw_verticies: []shared.DrawVertex,
     draw_indecies: []shared.DrawIndex,
-    //font_renderer: *FontRenderer,
-    //ctx: *anyopaque,
-    //request_srv: *const fn(ctx: *anyopaque, img: *Image) *anyopaque,
 ) Gui {
     return .{
         .draw_commands = .initBuffer(draw_commands),
         .draw_verticies = .initBuffer(draw_verticies),
         .draw_indecies = .initBuffer(draw_indecies),
-        //.font_renderer = font_renderer,
-        //.ctx = ctx,
-        //.request_srv = request_srv,
     };
 }
 
@@ -92,7 +50,7 @@ pub fn rect(gui: *Gui, top: [2]f32, bot: [2]f32, col: u32) void {
     gui.addDrawCommand(.{
         .verticies = &verticies,
         .indecies = &indecies,
-        .image = &white_pixel,
+        .image = &white_pixel.interface,
     });
 }
 
@@ -182,9 +140,6 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
     if (self.draw_verticies.items.len + draw_cmd.verticies.len > self.draw_verticies.capacity) return;
     if (self.draw_indecies.items.len + draw_cmd.indecies.len > self.draw_indecies.capacity) return;
 
-    //self.draw_verticies.ensureUnusedCapacity(draw_cmd.verticies.len) catch return;
-    //self.draw_indecies.ensureUnusedCapacity(draw_cmd.indecies.len) catch return;
-
     const reuse_image = blk: {
         const last_draw_cmd = self.draw_commands.getLastOrNull() orelse break :blk false;
         break :blk last_draw_cmd.image == draw_cmd.image;
@@ -192,7 +147,6 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
 
     if (!reuse_image) {
         if (self.draw_commands.items.len == self.draw_commands.capacity) return;
-        // self.validate_image(draw_cmd.image);
     }
 
     self.draw_verticies.appendSliceAssumeCapacity(draw_cmd.verticies);
