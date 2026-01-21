@@ -36,7 +36,7 @@ const Context = struct {
         const manager = try (try windows.GlobalSystemMediaTransportControlsSessionManager.RequestAsync()).getAndForget(gpa);
         errdefer manager.Release();
 
-        const pixels = &[_]u8{0xFF} ** 64 ** 64;
+        const pixels = &[_]u8{0xFF} ** 64 ** 64 ** 4;
         const cover = try Image.init(c.gpa, .{
             .width = 64,
             .height = 64,
