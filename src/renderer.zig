@@ -7,14 +7,7 @@ const atomic = std.atomic;
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
 
-const State = enum(u8) {
-    initialized,
-    initializing,
-    failure,
-    uninitialized,
-    exiting,
-    exited
-};
+const State = enum(u8) { initialized, initializing, failure, uninitialized, exiting, exited };
 
 var state: atomic.Value(State) = .init(.uninitialized);
 

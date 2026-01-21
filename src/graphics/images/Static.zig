@@ -40,7 +40,7 @@ pub fn init(gpa: Allocator, d: Image.Descriptor) Allocator.Error!*Image {
 fn destroy(img: *Image) void {
     const static: *Static = @alignCast(@fieldParentPtr("interface", img));
 
-    static.gpa.free(static.pixels[0..img.width * img.height * @intFromEnum(img.format)]);
+    static.gpa.free(static.pixels[0 .. img.width * img.height * @intFromEnum(img.format)]);
     static.gpa.destroy(static);
 }
 
@@ -68,5 +68,4 @@ fn loadResource(img: *Image, device: *Device) Device.Error!Image.Resource {
     };
 }
 
-fn syncResource(_: *Image, _: *Device, _: *Image.Resource) Device.Error!void {
-}
+fn syncResource(_: *Image, _: *Device, _: *Image.Resource) Device.Error!void {}

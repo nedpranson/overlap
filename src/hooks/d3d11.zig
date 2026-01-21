@@ -292,14 +292,13 @@ fn Present(
         }
 
         break :blk result.value_ptr;
-
     } orelse return present(pSwapChain, SyncInterval, Flags);
 
     const static = struct {
         threadlocal var draw_commands: [shared.max_draw_commands]shared.DrawCommand = undefined;
         threadlocal var draw_verticies: [shared.max_verticies]shared.DrawVertex = undefined;
         threadlocal var draw_indicies: [shared.max_indicies]shared.DrawIndex = undefined;
-        
+
         fn loadSRV(device: *graphics.d3d11.Device, img: *Image) *anyopaque {
             var ins: *Instance = @fieldParentPtr("device", device);
 

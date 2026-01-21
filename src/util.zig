@@ -8,8 +8,8 @@ pub fn SynchronizedHashMap(comptime K: type, comptime V: type) type {
         map: Map,
         mu: Thread.Mutex,
 
-        pub const empty: Self = .{ 
-            .map = .empty, 
+        pub const empty: Self = .{
+            .map = .empty,
             .mu = .{},
         };
 
@@ -80,7 +80,6 @@ pub fn SynchronizedHashMap(comptime K: type, comptime V: type) type {
             pub inline fn done(self: ValueIterator) void {
                 self.mu.unlock();
             }
-
         };
 
         pub fn valueIterator(self: *Self) ValueIterator {
@@ -90,7 +89,6 @@ pub fn SynchronizedHashMap(comptime K: type, comptime V: type) type {
                 .mu = &self.mu,
             };
         }
-
     };
 }
 

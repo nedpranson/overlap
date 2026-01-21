@@ -49,9 +49,7 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
     while (true) {
         switch (state.load(.acquire)) {
             .initializing => atomic.spinLoopHint(),
-            .initialized,
-            .uninitialized,
-            .failure => |s| {
+            .initialized, .uninitialized, .failure => |s| {
                 if (s == .initialized) @call(.always_inline, cleanup, .{});
                 return windows.TRUE;
             },

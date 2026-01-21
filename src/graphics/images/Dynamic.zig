@@ -48,7 +48,7 @@ fn destroy(img: *Image) void {
 
     std.debug.print("destroying dynamic image: {*}\n", .{dynamic});
 
-    dynamic.gpa.free(dynamic.pixels[0..img.width * img.height * @intFromEnum(img.format)]);
+    dynamic.gpa.free(dynamic.pixels[0 .. img.width * img.height * @intFromEnum(img.format)]);
     dynamic.gpa.destroy(dynamic);
 }
 
@@ -58,7 +58,7 @@ fn update(img: *Image, pixels: []const u8) void {
     dynamic.lock.lock();
     defer dynamic.lock.unlock();
 
-    @memcpy(dynamic.pixels[0..img.width * img.height * @intFromEnum(img.format)], pixels);
+    @memcpy(dynamic.pixels[0 .. img.width * img.height * @intFromEnum(img.format)], pixels);
     dynamic.revision +%= 1;
 }
 

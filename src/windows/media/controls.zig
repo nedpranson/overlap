@@ -247,7 +247,7 @@ pub const IGlobalSystemMediaTransportControlsSession = extern struct {
         };
     }
 
-    pub const RemoveTimelinePropertiesChangedError  = error{
+    pub const RemoveTimelinePropertiesChangedError = error{
         Unexpected,
     };
 

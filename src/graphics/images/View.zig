@@ -24,8 +24,7 @@ pub fn init(d: Image.Descriptor) View {
     };
 }
 
-fn destroy(_: *Image) void {
-}
+fn destroy(_: *Image) void {}
 
 fn update(img: *Image, pixels: []const u8) void {
     _ = img;
@@ -51,5 +50,4 @@ fn loadResource(img: *Image, device: *Device) Device.Error!Image.Resource {
     };
 }
 
-fn syncResource(_: *Image, _: *Device, _: *Image.Resource) Device.Error!void {
-}
+fn syncResource(_: *Image, _: *Device, _: *Image.Resource) Device.Error!void {}

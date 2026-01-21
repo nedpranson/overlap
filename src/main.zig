@@ -23,15 +23,13 @@ const Context = struct {
 
     const Player = struct {
         session: windows.GlobalSystemMediaTransportControlsSession,
-
         timeline_changed: i64,
         properties_changed: i64,
-
         timeline: struct {
             last_updated: i64,
             end_time: i64,
             position: i64,
-        }
+        },
     };
 
     fn init(c: *Context, gpa: Allocator) !void {
@@ -75,7 +73,7 @@ const Context = struct {
         }
 
         const session = (try c.manager.GetCurrentSession()) orelse return;
-        var player: Player = .{ 
+        var player: Player = .{
             .session = session,
             .timeline_changed = undefined,
             .properties_changed = undefined,
@@ -83,7 +81,7 @@ const Context = struct {
         };
 
         // todo: tidy everything here
-        
+
         const timeline = try session.GetTimelineProperties();
         defer timeline.Release();
 
@@ -130,9 +128,9 @@ const Context = struct {
         // todo: update like artist and stuff
 
         //if (player.cover) |cover| {
-            // todo: think is deinit call is even clear as it just decRef this call is like hidden behaviour
-            //cover.deinit();
-            //player.cover = null;
+        // todo: think is deinit call is even clear as it just decRef this call is like hidden behaviour
+        //cover.deinit();
+        //player.cover = null;
         //}
 
         const properties = try (try player.session.TryGetMediaPropertiesAsync()).getAndForget(c.gpa);
@@ -184,11 +182,11 @@ const Context = struct {
         // todo: handle like non square ones
 
         const pixels = try (try frame.GetPixelDataTransformedAsync(
-                windows.BitmapPixelFormat_Rgba8,
-                windows.BitmapAlphaMode_Premultiplied,
-                transform,
-                windows.ExifOrientationMode_IgnoreExifOrientation,
-                windows.ColorManagementMode_DoNotColorManage,
+            windows.BitmapPixelFormat_Rgba8,
+            windows.BitmapAlphaMode_Premultiplied,
+            transform,
+            windows.ExifOrientationMode_IgnoreExifOrientation,
+            windows.ColorManagementMode_DoNotColorManage,
         )).getAndForget(c.gpa);
         defer pixels.Release();
 

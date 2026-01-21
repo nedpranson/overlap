@@ -77,7 +77,6 @@ pub inline fn loadResource(img: *Image, device: *Device) Device.Error!Resource {
     return img.vtable.load_resource(img, device);
 }
 
-
 pub inline fn syncResource(img: *Image, device: *Device, cache: *Resource) Device.Error!void {
     return img.vtable.sync_resource(img, device, cache);
 }
