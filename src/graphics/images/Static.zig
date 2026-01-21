@@ -44,8 +44,6 @@ fn destroy(img: *Image) void {
 
     static.gpa.free(static.pixels[0..img.width * img.height * @intFromEnum(img.format)]);
     static.gpa.destroy(static);
-
-    static.* = undefined;
 }
 
 fn update(img: *Image, pixels: []const u8) void {

@@ -132,6 +132,9 @@ pub fn deinit() void {
         log.err("LoadLibraryW: cannot detach: {}", .{err});
     }
 
+    hook_mu.lock();
+    defer hook_mu.unlock();
+
     for (hooks) |hook| {
         if (!hook.active()) continue;
         hook.detach();

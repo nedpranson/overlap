@@ -43,6 +43,9 @@ pub fn cleanup() void {
     while (true) {
         switch (state.load(.acquire)) {
             .initialized => if (state.cmpxchgWeak(.initialized, .exiting, .release, .monotonic) == null) {
+                // todo: wait for all rendering threads
+                //       to finish drawing what they're drawing
+
                 reset_event_a.set();
                 reset_event_b.wait(); // todo: remove wait as that setup thread is still executing some code we need join!!!
 

@@ -50,8 +50,6 @@ fn destroy(img: *Image) void {
 
     dynamic.gpa.free(dynamic.pixels[0..img.width * img.height * @intFromEnum(img.format)]);
     dynamic.gpa.destroy(dynamic);
-
-    dynamic.* = undefined;
 }
 
 fn update(img: *Image, pixels: []const u8) void {
