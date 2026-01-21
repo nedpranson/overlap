@@ -37,7 +37,7 @@ const Context = struct {
         errdefer manager.Release();
 
         const pixels = &[_]u8{0xFF} ** 64 ** 64 ** 4;
-        const cover = try Image.init(c.gpa, .{
+        const cover = try Image.init(gpa, .{
             .width = 64,
             .height = 64,
             .data = pixels,
