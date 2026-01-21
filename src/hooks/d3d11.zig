@@ -26,25 +26,15 @@ pub const interface: hooks.Hook = .define("d3d11.dll", .{
     .unload_image = &unloadImage,
 });
 
-const Resource = struct {
-    tex: *d3d11.ID3D11Texture2D,
-    srv: *d3d11.ID3D11ShaderResourceView,
-    modified: u16,
-
-    pub fn deinit(res: Resource) void {
-        res.srv.Release();
-        res.tex.Release();
-    }
-};
-
 const Instance = struct {
     device: graphics.d3d11.Device,
-    resources: SynchronizedHashMap(*Image, Resource),
+    resources: SynchronizedHashMap(*Image, Image.Resource),
 
     fn deinit(self: *Instance, gpa: Allocator) void {
         var it = self.resources.valueIterator();
         while (it.next()) |resource| {
-            resource.deinit();
+            @as(*windows.IUnknown, @ptrCast(@alignCast(resource.srv))).Release();
+            @as(*windows.IUnknown, @ptrCast(@alignCast(resource.tex))).Release();
         }
         it.done();
 
@@ -249,8 +239,9 @@ pub fn unloadImage(img: *Image) void {
     defer it.done();
 
     while (it.next()) |instance| {
-        if (instance.resources.fetchRemove(img)) |res| {
-            res.value.deinit();
+        if (instance.resources.fetchRemove(img)) |kv| {
+            @as(*windows.IUnknown, @ptrCast(@alignCast(kv.value.srv))).Release();
+            @as(*windows.IUnknown, @ptrCast(@alignCast(kv.value.tex))).Release();
         }
     }
 }
@@ -317,13 +308,11 @@ fn Present(
 
             if (!result.found_existing) {
                 @branchHint(.unlikely);
-                const resource = img.loadResource(device);
 
-                result.value_ptr.* = .{
-                    .tex = @ptrCast(@alignCast(resource.tex)),
-                    .srv = @ptrCast(@alignCast(resource.srv)),
-                    .modified = 0,
-                };
+                const resource = img.loadResource(device);
+                result.value_ptr.* = resource;
+            } else {
+                img.syncResource(device, result.value_ptr);
             }
 
             return result.value_ptr.srv;

@@ -7,6 +7,7 @@ const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
 pub const Static = @import("images/Static.zig");
+pub const Dynamic = @import("images/Dynamic.zig");
 
 width: u32,
 height: u32,
@@ -31,6 +32,7 @@ pub const Format = enum(u3) {
 pub const Resource = struct {
     tex: *anyopaque,
     srv: *anyopaque,
+    revision: u32,
 };
 
 // todo: make load_resource take in like a funciton ptr
@@ -38,6 +40,12 @@ pub const VTable = struct {
     destroy: *const fn (img: *Image) void,
     update: *const fn (img: *Image, data: []const u8) void,
     load_resource: *const fn (img: *Image, device: *Device) Resource,
+    sync_resource: *const fn (img: *Image, device: *Device, cache: *Resource) void,
+};
+
+pub const Usage = enum {
+    static,
+    dynamic,
 };
 
 pub const Descriptor = struct {
@@ -45,23 +53,32 @@ pub const Descriptor = struct {
     height: u32,
     data: []const u8,
     format: Format,
+    usage: Usage = .static,
 };
 
 pub fn init(gpa: Allocator, d: Descriptor) Allocator.Error!*Image {
     assert(d.data.len == d.width * d.height * @intFromEnum(d.format));
-    return Static.init(gpa, d);
+    return switch (d.usage) {
+        .static => Static.init(gpa, d),
+        .dynamic => Dynamic.init(gpa, d),
+    };
 }
 
 pub inline fn deinit(img: *Image) void {
     remRef(img);
 }
 
-pub inline fn update(img: *Image, data: []const u8) void {
-    return img.vtable.update(img, data);
+pub inline fn update(img: *Image, pixels: []const u8) void {
+    return img.vtable.update(img, pixels);
 }
 
 pub inline fn loadResource(img: *Image, device: *Device) Resource {
     return img.vtable.load_resource(img, device);
+}
+
+
+pub inline fn syncResource(img: *Image, device: *Device, cache: *Resource) void {
+    return img.vtable.sync_resource(img, device, cache);
 }
 
 pub fn addRef(img: *Image) void {

@@ -28,6 +28,7 @@ pub fn init(gpa: Allocator, d: Image.Descriptor) Allocator.Error!*Image {
             .vtable = &.{
                 .destroy = destroy,
                 .update = update,
+                .sync_resource = syncResource,
                 .load_resource = loadResource,
             },
         },
@@ -47,10 +48,13 @@ fn destroy(img: *Image) void {
     static.* = undefined;
 }
 
-fn update(img: *Image, data: []const u8) void {
+fn update(img: *Image, pixels: []const u8) void {
     _ = img;
-    _ = data;
+    _ = pixels;
     @panic("update called on a static image");
+}
+
+fn syncResource(_: *Image, _: *Device, _: *Image.Resource) void {
 }
 
 fn loadResource(img: *Image, device: *Device) Image.Resource {
@@ -67,5 +71,6 @@ fn loadResource(img: *Image, device: *Device) Image.Resource {
     return .{
         .tex = tex,
         .srv = srv,
+        .revision = 0,
     };
 }

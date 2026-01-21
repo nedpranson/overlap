@@ -8,6 +8,43 @@ const mem = std.mem;
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
 
+// todo: tidy this up!
+var fallback_cover: Image = .{
+    .width = 2,
+    .height = 2,
+    .format = .r,
+    .vtable = &.{
+        .destroy = struct {
+            fn inner(_: *Image) void {}
+        }.inner,
+        .update = struct {
+            fn inner(_: *Image, _: []const u8) void {
+            }
+        }.inner,
+        .load_resource = struct {
+            fn inner(_: *Image, device: *@import("graphics/d3d11.zig").Device) Image.Resource {
+                const tex, const srv = device.loadImage(.{
+                    .width = 2,
+                    .height = 2,
+                    .bytes = &[_]u8{0xFF, 0x00, 0x00, 0xFF},
+                    .is_static = true,
+                    .channels = 1,
+                });
+
+                return .{
+                    .tex = tex,
+                    .srv = srv,
+                    .revision = 0,
+                };
+            }
+        }.inner,
+        .sync_resource = struct {
+            fn inner(_: *Image, _: *@import("graphics/d3d11.zig").Device, _: *Image.Resource) void {
+            }
+        }.inner,
+    },
+};
+
 const Context = struct {
     gpa: Allocator,
 
@@ -122,11 +159,11 @@ const Context = struct {
 
         // todo: update like artist and stuff
 
-        if (player.cover) |cover| {
+        //if (player.cover) |cover| {
             // todo: think is deinit call is even clear as it just decRef this call is like hidden behaviour
-            cover.deinit();
-            player.cover = null;
-        }
+            //cover.deinit();
+            //player.cover = null;
+        //}
 
         const properties = try (try player.session.TryGetMediaPropertiesAsync()).getAndForget(c.gpa);
         defer properties.Release();
@@ -186,12 +223,16 @@ const Context = struct {
         var len: u32 = undefined;
         pixels.DetachPixelData(&len, &ptr); // todo: add PixelDataProvider
 
-        player.cover = try .init(c.gpa, .{
-            .width = 64,
-            .height = 64,
-            .data = ptr[0..len],
-            .format = .rgba,
-        });
+        if (player.cover) |cover| {
+            cover.update(ptr[0..len]);
+        } else {
+            player.cover = try .init(c.gpa, .{
+                .width = 64,
+                .height = 64,
+                .data = ptr[0..len],
+                .format = .rgba,
+            });
+        }
     }
 
     fn deinit(c: *Context) void {

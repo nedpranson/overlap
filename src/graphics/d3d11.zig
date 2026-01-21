@@ -441,14 +441,14 @@ pub const Device = struct {
         return .{ tex, srv };
     }
 
-    pub fn updateImage(device: *Device, tex: *d3d11.ID3D11Texture2D, img: *const Image) void {
+    pub fn updateImage(device: *Device, tex: *d3d11.ID3D11Texture2D, d: Descriptor) void {
         var mapped_resource: d3d11.D3D11_MAPPED_SUBRESOURCE = undefined;
 
         // todo: catch errors
         device.device_context.Map(@ptrCast(tex), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource) catch unreachable;
         defer device.device_context.Unmap(@ptrCast(tex), 0);
 
-        mapped_resource.write(u8, img.data[0..img.width * img.height], img.width * @intFromEnum(img.format));
+        mapped_resource.write(u8, d.bytes[0..d.width * d.height * d.channels], d.width * d.channels);
     }
 
 };

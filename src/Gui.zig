@@ -37,7 +37,12 @@ var white_pixel: Image = .{
                 return .{
                     .tex = tex,
                     .srv = srv,
+                    .revision = 0,
                 };
+            }
+        }.inner,
+        .sync_resource = struct {
+            fn inner(_: *Image, _: *Device, _: *Image.Resource) void {
             }
         }.inner,
     },
