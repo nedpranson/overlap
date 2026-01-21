@@ -141,13 +141,15 @@ pub fn advanceWidthf(self: *Gui, codepoint: u21, descriptor: Descriptor) !f32 {
     return @floatFromInt(try advanceWidth(self, codepoint, descriptor));
 }
 
-pub fn textW(gui: *Gui, pos: [2]f32, msg: []const u16, descriptor: Descriptor) !void {
+pub fn textW(gui: *Gui, pos: [2]f32, msg: []const u16, descriptor: Descriptor) void {
     var it = unicode.Wtf16LeIterator.init(msg);
 
     var advance: f32 = 0.0;
     while (it.nextCodepoint()) |codepoint| {
         // todo: this is just stoopid that zig cant hash f32 so i need todo it my self ok
-        const glyph = try gui.font_renderer.getGlyph(.{ .size = @bitCast(descriptor.size), .codepoint = codepoint });
+        // todo: have a fallback glyph on errors
+        // todo: make FontRenderer threadsafe!!!
+        const glyph = @import("renderer.zig").font_renderer.getGlyph(.{ .size = @bitCast(descriptor.size), .codepoint = codepoint }) catch return;
         defer advance += @floatFromInt(glyph.metrics.advance_x);
 
         const top = [2]f32{ pos[x] + @as(f32, @floatFromInt(glyph.metrics.bearing_x)) + advance, pos[y] + @as(f32, @floatFromInt(glyph.metrics.bearing_y)) };
@@ -166,7 +168,7 @@ pub fn textW(gui: *Gui, pos: [2]f32, msg: []const u16, descriptor: Descriptor) !
         };
 
         gui.addDrawCommand(.{
-            .image = gui.request_srv(gui.ctx, gui.font_renderer.atlas.image),
+            .image = @import("renderer.zig").font_renderer.atlas.image,
             .verticies = &verticies,
             .indecies = &indecies,
         });

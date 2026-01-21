@@ -1,6 +1,7 @@
 const std = @import("std");
 const Gui = @import("Gui.zig");
 const main = @import("main.zig");
+const FontRenderer = @import("graphics/FontRenderer.zig");
 
 const atomic = std.atomic;
 const Allocator = std.mem.Allocator;
@@ -20,9 +21,16 @@ var state: atomic.Value(State) = .init(.uninitialized);
 var reset_event_a: Thread.ResetEvent = .{};
 var reset_event_b: Thread.ResetEvent = .{};
 
+// todo: find a better place for this!!!
+pub var font_renderer: FontRenderer = undefined;
+
 // todo: need to detach on on .failure state!
 
 fn setup(gpa: Allocator) void {
+    // todo: catch errors
+    // todo: we rly need to rething how we do font rendering
+    font_renderer = FontRenderer.init(gpa) catch unreachable;
+
     main.setup(gpa) catch |err| {
         std.debug.print("error: {s}\n", .{@errorName(err)});
         if (@errorReturnTrace()) |trace| {
@@ -36,6 +44,7 @@ fn setup(gpa: Allocator) void {
     reset_event_a.wait();
 
     main.cleanup();
+    font_renderer.deinit();
     reset_event_b.set();
 }
 

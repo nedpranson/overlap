@@ -293,4 +293,7 @@ pub fn render(gui: *Gui) void {
     }
 
     gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, playback_info.cover);
+
+    gui.textW(.{ pos[x], pos[y] }, unicode.wtf8ToWtf16LeStringLiteral("Hello World!"), .{});
+    gui.textW(.{ pos[x], pos[y] + 20.0 }, unicode.wtf8ToWtf16LeStringLiteral("Hello World!"), .{ .size = 10.0 });
 }
