@@ -224,6 +224,9 @@ const Context = struct {
         pixels.DetachPixelData(&len, &ptr); // todo: add PixelDataProvider
 
         if (player.cover) |cover| {
+            // we're leaking memory!!!!
+            // noone is releasing cover on session change event
+            std.debug.print("update cover\n", .{});
             cover.update(ptr[0..len]);
         } else {
             player.cover = try .init(c.gpa, .{
@@ -231,6 +234,7 @@ const Context = struct {
                 .height = 64,
                 .data = ptr[0..len],
                 .format = .rgba,
+                .usage = .dynamic,
             });
         }
     }
@@ -259,12 +263,6 @@ const Context = struct {
         cover: ?*Image,
         position: i64,
         end_time: i64,
-
-        pub fn deinit(info: PlaybackInfo) void {
-            if (info.cover) |cover| {
-                cover.remRef();
-            }
-        }
     };
 
     fn getPlaybackInfo(c: *Context) ?PlaybackInfo {
@@ -286,10 +284,6 @@ const Context = struct {
 
             break :blk player.timeline.position + elapsed;
         };
-
-        if (player.cover) |cover| {
-            cover.addRef();
-        }
 
         return .{
             .cover = player.cover,
@@ -316,7 +310,6 @@ pub fn cleanup() void {
 
 pub fn render(gui: *Gui) void {
     const playback_info = ctx.getPlaybackInfo() orelse return;
-    defer playback_info.deinit();
 
     const x = 0;
     const y = 1;

@@ -74,6 +74,8 @@ fn syncResource(img: *Image, device: *Device, cache: *Image.Resource) void {
         return;
     }
 
+    std.debug.print("updating backend image!\n", .{});
+
     device.updateImage(@ptrCast(@alignCast(cache.tex)), .{
         .width = img.width,
         .height = img.height,
