@@ -8,43 +8,6 @@ const mem = std.mem;
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
 
-// todo: tidy this up!
-var fallback_cover: Image = .{
-    .width = 2,
-    .height = 2,
-    .format = .r,
-    .vtable = &.{
-        .destroy = struct {
-            fn inner(_: *Image) void {}
-        }.inner,
-        .update = struct {
-            fn inner(_: *Image, _: []const u8) void {
-            }
-        }.inner,
-        .load_resource = struct {
-            fn inner(_: *Image, device: *@import("graphics/d3d11.zig").Device) Image.Resource {
-                const tex, const srv = device.loadImage(.{
-                    .width = 2,
-                    .height = 2,
-                    .bytes = &[_]u8{0xFF, 0x00, 0x00, 0xFF},
-                    .is_static = true,
-                    .channels = 1,
-                });
-
-                return .{
-                    .tex = tex,
-                    .srv = srv,
-                    .revision = 0,
-                };
-            }
-        }.inner,
-        .sync_resource = struct {
-            fn inner(_: *Image, _: *@import("graphics/d3d11.zig").Device, _: *Image.Resource) void {
-            }
-        }.inner,
-    },
-};
-
 const Context = struct {
     gpa: Allocator,
 
@@ -53,6 +16,7 @@ const Context = struct {
     manager: windows.GlobalSystemMediaTransportControlsSessionManager,
     session_changed: i64,
 
+    cover: *Image,
     player: ?Player,
 
     const Player = struct {
@@ -60,8 +24,6 @@ const Context = struct {
 
         timeline_changed: i64,
         properties_changed: i64,
-
-        cover: ?*Image,
 
         timeline: struct {
             last_updated: i64,
@@ -74,11 +36,22 @@ const Context = struct {
         const manager = try (try windows.GlobalSystemMediaTransportControlsSessionManager.RequestAsync()).getAndForget(gpa);
         errdefer manager.Release();
 
+        const pixels = &[_]u8{0xFF} ** 64 ** 64;
+        const cover = try Image.init(c.gpa, .{
+            .width = 64,
+            .height = 64,
+            .data = pixels,
+            .format = .rgba,
+            .usage = .dynamic,
+        });
+        errdefer cover.deinit();
+
         c.* = .{
             .gpa = gpa,
             .lock = .{},
             .manager = manager,
             .player = null,
+            .cover = cover,
             .session_changed = undefined,
         };
 
@@ -96,10 +69,6 @@ const Context = struct {
             player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
             player.session.Release();
 
-            if (player.cover) |cover| {
-                cover.deinit();
-            }
-
             c.player = null;
         }
 
@@ -108,7 +77,6 @@ const Context = struct {
             .session = session,
             .timeline_changed = undefined,
             .properties_changed = undefined,
-            .cover = null,
             .timeline = undefined,
         };
 
@@ -223,20 +191,7 @@ const Context = struct {
         var len: u32 = undefined;
         pixels.DetachPixelData(&len, &ptr); // todo: add PixelDataProvider
 
-        if (player.cover) |cover| {
-            // we're leaking memory!!!!
-            // noone is releasing cover on session change event
-            std.debug.print("update cover\n", .{});
-            cover.update(ptr[0..len]);
-        } else {
-            player.cover = try .init(c.gpa, .{
-                .width = 64,
-                .height = 64,
-                .data = ptr[0..len],
-                .format = .rgba,
-                .usage = .dynamic,
-            });
-        }
+        c.cover.update(ptr[0..len]);
     }
 
     fn deinit(c: *Context) void {
@@ -245,22 +200,20 @@ const Context = struct {
         if (c.player) |player| {
             player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
             player.session.Release();
-
-            if (player.cover) |cover| {
-                cover.deinit();
-            }
         }
 
         // wait till all work is done! like in handleSessions and other handles
         // as now as we deinit object handleSession can be running
 
         c.manager.Release();
+        c.cover.deinit();
+
         c.* = undefined;
     }
 
     // tood: add like default cover
     const PlaybackInfo = struct {
-        cover: ?*Image,
+        cover: *Image,
         position: i64,
         end_time: i64,
     };
@@ -286,7 +239,7 @@ const Context = struct {
         };
 
         return .{
-            .cover = player.cover,
+            .cover = c.cover,
             .position = position,
             .end_time = player.timeline.end_time,
         };
@@ -335,7 +288,5 @@ pub fn render(gui: *Gui) void {
         gui.rect(.{ -1.0 + pos[x] + @floor(bar_width), pos[y] + image_size }, .{ -1.0 + pos[x] + @floor(bar_width) + 1.0, pos[y] + image_size + 1.0 }, col);
     }
 
-    if (playback_info.cover) |cover| {
-        gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, cover);
-    }
+    gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, playback_info.cover);
 }
