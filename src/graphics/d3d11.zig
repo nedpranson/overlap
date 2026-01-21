@@ -429,7 +429,7 @@ pub const Device = struct {
             device.device_context.Map(@ptrCast(tex), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource) catch unreachable;
             defer device.device_context.Unmap(@ptrCast(tex), 0);
 
-            mapped_resource.write(u8, d.bytes[0..d.width * d.height], d.width * d.channels);
+            mapped_resource.write(u8, d.bytes[0..d.width * d.height * d.channels], d.width * d.channels);
             errdefer tex.Release();
         }
         errdefer tex.Release();

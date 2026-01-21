@@ -19,6 +19,8 @@ const Context = struct {
     cover: *Image,
     player: ?Player,
 
+    const white_pixels = &[_]u8{0xFF} ** 64 ** 64 ** 4;
+
     const Player = struct {
         session: windows.GlobalSystemMediaTransportControlsSession,
 
@@ -36,11 +38,10 @@ const Context = struct {
         const manager = try (try windows.GlobalSystemMediaTransportControlsSessionManager.RequestAsync()).getAndForget(gpa);
         errdefer manager.Release();
 
-        const pixels = &[_]u8{0xFF} ** 64 ** 64 ** 4;
         const cover = try Image.init(gpa, .{
             .width = 64,
             .height = 64,
-            .data = pixels,
+            .data = white_pixels,
             .format = .rgba,
             .usage = .dynamic,
         });
@@ -136,7 +137,10 @@ const Context = struct {
         const properties = try (try player.session.TryGetMediaPropertiesAsync()).getAndForget(c.gpa);
         defer properties.Release();
 
-        const thumbnail = (try properties.Thumbnail()) orelse return;
+        const thumbnail = (try properties.Thumbnail()) orelse {
+            c.cover.update(white_pixels);
+            return;
+        };
         defer thumbnail.Release();
 
         const stream = try (try thumbnail.OpenReadAsync()).getAndForget(c.gpa);
