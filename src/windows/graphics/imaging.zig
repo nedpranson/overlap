@@ -209,7 +209,6 @@ pub const IPixelDataProvider = extern struct {
         IUnknown.Release(@ptrCast(self));
     }
 
-    // todo: add PixelDataProvider that would just return []const u8
     pub fn DetachPixelData(self: *IPixelDataProvider, pixelDataLength: *UINT32, pixelData: *[*]const BYTE) void {
         const FnType = fn (*IPixelDataProvider, *UINT32, *[*]const BYTE) callconv(.winapi) HRESULT;
         const detach_pixel_data: *const FnType = @ptrCast(self.vtable[6]);

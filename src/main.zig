@@ -35,6 +35,10 @@ const Context = struct {
         timeline_changed: i64,
         properties_changed: i64,
         timeline: Timeline,
+        title: [64]u16,
+        artist: [64]u16,
+        title_len: u8,
+        artist_len: u8,
     };
 
     fn init(c: *Context, gpa: Allocator) !void {
@@ -66,6 +70,8 @@ const Context = struct {
     }
 
     fn handleSession(c: *Context, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
+        // todo: c* can be invalid!!!
+        //       add alive flag or smth
         var player: ?Player = null;
         var pixels: ?windows.PixelDataProvider = null;
         defer if (pixels) |p| p.Release();
@@ -85,12 +91,25 @@ const Context = struct {
             const properties_changed = try session.MediaPropertiesChanged(c.gpa, c, handleProperties);
             errdefer session.RemoveMediaPropertiesChanged(properties_changed) catch unreachable;
 
+            const title = properties.Title();
+            const artist = properties.Artist();
+
+            const title_len = @min(title.len, 64);
+            const artist_len = @min(artist.len, 64);
+
             player = .{
                 .session = session,
                 .timeline_changed = timeline_changed,
                 .properties_changed = properties_changed,
                 .timeline = try getTimeline(session),
+                .title = undefined,
+                .artist = undefined,
+                .title_len = title_len,
+                .artist_len = artist_len,
             };
+
+            @memcpy(player.?.title[0..title_len], title[0..title_len]);
+            @memcpy(player.?.artist[0..artist_len], artist[0..artist_len]);
         }
 
         c.lock.lock();
@@ -176,6 +195,7 @@ const Context = struct {
     }
 
     fn handleTimeline(c: *Context, _: windows.GlobalSystemMediaTransportControlsSession) !void {
+        // todo: c* can be invalid!!!
         c.lock.lock();
         defer c.lock.unlock();
 
@@ -184,6 +204,7 @@ const Context = struct {
     }
 
     fn handleProperties(c: *Context, session: windows.GlobalSystemMediaTransportControlsSession) !void {
+        // todo: c* can be invalid!!!
         const properties = try (try session.TryGetMediaPropertiesAsync()).getAndForget(c.gpa);
         defer properties.Release();
 
@@ -195,11 +216,24 @@ const Context = struct {
         };
         defer if (pixels) |p| p.Release();
 
+
+        const title = properties.Title();
+        const artist = properties.Artist();
+
+        const title_len = @min(title.len, 64);
+        const artist_len = @min(artist.len, 64);
+
         c.lock.lock();
         defer c.lock.unlock();
 
         const player = &(c.player orelse return);
         if (player.session.handle != session.handle) return;
+
+        player.title_len = title_len;
+        player.artist_len = artist_len;
+
+        @memcpy(player.title[0..title_len], title[0..title_len]);
+        @memcpy(player.artist[0..artist_len], artist[0..artist_len]);
 
         if (pixels) |p| {
             c.cover.update(p.DetachPixelData());
@@ -226,13 +260,26 @@ const Context = struct {
         c.* = undefined;
     }
 
-    // tood: add like default cover
     const PlaybackInfo = struct {
         cover: *Image,
         position: i64,
         end_time: i64,
+        title_buf: [64]u16,
+        artist_buf: [64]u16,
+        title_len: u8,
+        artist_len: u8,
+
+        pub inline fn title(pi: PlaybackInfo) []const u16 {
+            return pi.title_buf[0..pi.title_len];
+        }
+
+        pub inline fn artist(pi: PlaybackInfo) []const u16 {
+            return pi.artist_buf[0..pi.artist_len];
+        }
     };
 
+    // cover can update any time
+    // mb for each player allocate its cover
     fn getPlaybackInfo(c: *Context) ?PlaybackInfo {
         c.lock.lockShared();
         defer c.lock.unlockShared();
@@ -257,6 +304,10 @@ const Context = struct {
             .cover = c.cover,
             .position = position,
             .end_time = player.timeline.end_time,
+            .title_buf = player.title,
+            .artist_buf = player.artist,
+            .title_len = player.title_len,
+            .artist_len = player.artist_len,
         };
     }
 };
@@ -305,6 +356,6 @@ pub fn render(gui: *Gui) void {
 
     gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, playback_info.cover);
 
-    gui.textW(.{ pos[x], pos[y] }, unicode.wtf8ToWtf16LeStringLiteral("Hello World!"), .{});
-    gui.textW(.{ pos[x], pos[y] + 20.0 }, unicode.wtf8ToWtf16LeStringLiteral("Hello World!"), .{ .size = 10.0 });
+    gui.textW(.{ pos[x] + image_size + padding, pos[y] + padding }, playback_info.title(), .{ .size = 10.0 });
+    gui.textW(.{ pos[x] + image_size + padding, pos[y] + padding + 20.0 }, playback_info.artist(), .{ .size = 10.0, .color = 0x808080FF });
 }
