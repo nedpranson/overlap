@@ -101,8 +101,6 @@ pub const Device = struct {
             .vertex_buffer = undefined,
             .index_buffer = undefined,
             .sampler = undefined,
-            //.white_pixel_texture = undefined,
-            //.white_pixel_resource = undefined,
         };
 
         try swap_chain.GetBuffer(0, d3d11.ID3D11Texture2D.UUID, @ptrCast(&back_buffer));
@@ -214,27 +212,6 @@ pub const Device = struct {
         try device.CreateBuffer(&index_buffer_desc, null, &result.index_buffer);
         errdefer result.index_buffer.Release();
 
-        //var texture_desc = mem.zeroes(d3d11.D3D11_TEXTURE2D_DESC);
-        //texture_desc.Width = 1;
-        //texture_desc.Height = 1;
-        //texture_desc.MipLevels = 1;
-        //texture_desc.ArraySize = 1;
-        //texture_desc.Format = dxgi.DXGI_FORMAT_R8_UNORM;
-        //texture_desc.SampleDesc.Count = 1;
-        //texture_desc.Usage = d3d11.D3D11_USAGE_DEFAULT;
-        //texture_desc.BindFlags = d3d11.D3D11_BIND_SHADER_RESOURCE;
-
-        // todo no!
-        //var initial_data = mem.zeroes(d3d11.D3D11_SUBRESOURCE_DATA);
-        //initial_data.pSysMem = &[1]u8{0xFF};
-        //initial_data.SysMemPitch = 1;
-
-        //try device.CreateTexture2D(&texture_desc, &initial_data, &result.white_pixel_texture);
-        //errdefer result.white_pixel_texture.Release();
-
-        //try device.CreateShaderResourceView(@ptrCast(result.white_pixel_texture), null, &result.white_pixel_resource);
-        //errdefer result.white_pixel_resource.Release();
-
         var sampler_desc = mem.zeroes(d3d11.D3D11_SAMPLER_DESC);
         sampler_desc.Filter = d3d11.D3D11_FILTER_MIN_MAG_MIP_LINEAR;
         sampler_desc.AddressU = d3d11.D3D11_TEXTURE_ADDRESS_CLAMP;
@@ -252,9 +229,6 @@ pub const Device = struct {
     }
 
     pub fn deinit(device: *Device) void {
-        //device.white_pixel_resource.Release();
-        //device.white_pixel_texture.Release();
-
         device.sampler.Release();
 
         device.blend_state.Release();

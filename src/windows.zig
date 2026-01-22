@@ -102,8 +102,8 @@ const IGlobalSystemMediaTransportControlsSessionPlaybackInfo = media.IGlobalSyst
 const IGlobalSystemMediaTransportControlsSessionManagerStatics = media.IGlobalSystemMediaTransportControlsSessionManagerStatics;
 const IGlobalSystemMediaTransportControlsSessionMediaProperties = media.IGlobalSystemMediaTransportControlsSessionMediaProperties;
 const IGlobalSystemMediaTransportControlsSessionTimelineProperties = media.IGlobalSystemMediaTransportControlsSessionTimelineProperties;
+const IPixelDataProvider = graphics.IPixelDataProvider;
 
-pub const IPixelDataProvider = graphics.IPixelDataProvider;
 pub const IBitmapTransform = graphics.IBitmapTransform;
 pub const BitmapInterpolationMode = graphics.BitmapInterpolationMode;
 
@@ -277,8 +277,7 @@ pub fn CreateWindowEx(
 }
 
 pub fn DestroyWindow(hWnd: HWND) void {
-    // todo: idk check for errors maybe
-    _ = user32.DestroyWindow(hWnd);
+    assert(user32.DestroyWindow(hWnd) == TRUE);
 }
 
 pub const IAgileObject = extern struct {
@@ -878,9 +877,14 @@ pub fn AsyncOperation(comptime TResult: type) type {
                 .Started => unreachable,
                 .Completed => self.handle.GetResults(),
                 .Error => {
-                    std.debug.print("{}\n", .{async_info.get_ErrorCode()});
-                    return error.UnhandledError;
-                }, // todo: get error stuff from info
+                    // if needed we could pass in TResult and TError
+                    // as these Errors depends on the operation
+                    const hr = async_info.get_ErrorCode();
+                    return switch (hr) {
+                        windows.E_OUTOFMEMORY => error.OutOfMemory,
+                        else => unexpectedError(HRESULT_CODE(hr)),
+                    };
+                },
                 .Canceled => error.Canceled,
             };
         }
@@ -1205,7 +1209,26 @@ pub const GlobalSystemMediaTransportControlsSession = struct {
     }
 };
 
-pub const GlobalSystemMediaTransportControlsSessionMediaProperties = extern struct {
+pub const PixelDataProvider = struct {
+    handle: *IPixelDataProvider,
+
+    pub const SIGNATURE = IPixelDataProvider.SIGNATURE;
+
+    pub inline fn Release(self: PixelDataProvider) void {
+        return self.handle.Release();
+    }
+
+    pub fn DetachPixelData(self: PixelDataProvider) []const u8 {
+        var ptr: [*]const u8 = undefined;
+        var len: u32 = undefined;
+
+        self.handle.DetachPixelData(&len, &ptr);
+        return ptr[0..len];
+    }
+
+};
+
+pub const GlobalSystemMediaTransportControlsSessionMediaProperties = struct {
     handle: *IGlobalSystemMediaTransportControlsSessionMediaProperties,
 
     pub const SIGNATURE = IGlobalSystemMediaTransportControlsSessionMediaProperties.SIGNATURE;
@@ -1302,14 +1325,14 @@ pub const BitmapFrame = struct {
         transform: *IBitmapTransform,
         exifOrientationMode: ExifOrientationMode,
         colorManagementMode: ColorManagementMode,
-    ) !AsyncOperation(*IPixelDataProvider) {
-        return .{ .handle = try self.handle.GetPixelDataTransformedAsync(
+    ) !AsyncOperation(PixelDataProvider) {
+        return .{ .handle = @ptrCast(try self.handle.GetPixelDataTransformedAsync(
             pixelFormat,
             alphaMode,
             transform,
             exifOrientationMode,
             colorManagementMode,
-        ) };
+        )) };
     }
 };
 

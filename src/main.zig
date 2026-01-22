@@ -8,6 +8,9 @@ const mem = std.mem;
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
 
+// when dumping a stack trace
+// we're reacching stack overflows
+
 const Context = struct {
     gpa: Allocator,
 
@@ -21,15 +24,17 @@ const Context = struct {
 
     const white_pixels = &[_]u8{0xFF} ** 64 ** 64 ** 4;
 
+    const Timeline = struct {
+        last_updated: i64,
+        end_time: i64,
+        position: i64,
+    };
+
     const Player = struct {
         session: windows.GlobalSystemMediaTransportControlsSession,
         timeline_changed: i64,
         properties_changed: i64,
-        timeline: struct {
-            last_updated: i64,
-            end_time: i64,
-            position: i64,
-        },
+        timeline: Timeline,
     };
 
     fn init(c: *Context, gpa: Allocator) !void {
@@ -61,94 +66,76 @@ const Context = struct {
     }
 
     fn handleSession(c: *Context, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
+        var player: ?Player = null;
+        var pixels: ?windows.PixelDataProvider = null;
+        defer if (pixels) |p| p.Release();
+
+        if (try c.manager.GetCurrentSession()) |session| {
+            const properties = try (try session.TryGetMediaPropertiesAsync()).getAndForget(c.gpa);
+            defer properties.Release();
+
+            if (try properties.Thumbnail()) |thumbnail| {
+                defer thumbnail.Release();
+                pixels = try getThumbnailPixels(c.gpa, thumbnail, try session.SourceAppUserModelId());
+            }
+
+            const timeline_changed = try session.TimelinePropertiesChanged(c.gpa, c, handleTimeline);
+            errdefer session.RemoveTimelinePropertiesChanged(timeline_changed) catch unreachable;
+
+            const properties_changed = try session.MediaPropertiesChanged(c.gpa, c, handleProperties);
+            errdefer session.RemoveMediaPropertiesChanged(properties_changed) catch unreachable;
+
+            player = .{
+                .session = session,
+                .timeline_changed = timeline_changed,
+                .properties_changed = properties_changed,
+                .timeline = try getTimeline(session),
+            };
+        }
+
         c.lock.lock();
         defer c.lock.unlock();
 
-        if (c.player) |player| {
-            player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
-            player.session.RemoveMediaPropertiesChanged(player.properties_changed) catch unreachable;
-            player.session.Release();
-
-            c.player = null;
+        if (c.player) |old_player| {
+            old_player.session.RemoveTimelinePropertiesChanged(old_player.timeline_changed) catch unreachable;
+            old_player.session.RemoveMediaPropertiesChanged(old_player.properties_changed) catch unreachable;
+            old_player.session.Release();
         }
 
-        const session = (try c.manager.GetCurrentSession()) orelse return;
-        var player: Player = .{
-            .session = session,
-            .timeline_changed = undefined,
-            .properties_changed = undefined,
-            .timeline = undefined,
-        };
-
-        // todo: tidy everything here
-
-        const timeline = try session.GetTimelineProperties();
-        defer timeline.Release();
-
-        const timestamp = std.time.milliTimestamp();
-
-        player.timeline.last_updated = timestamp;
-        player.timeline.end_time = @divTrunc(timeline.EndTime(), 10000);
-        player.timeline.position = @divTrunc(timeline.Position(), 10000);
-
-        player.timeline_changed = try session.TimelinePropertiesChanged(c.gpa, c, handleTimeline);
-        errdefer player.session.RemoveTimelinePropertiesChanged(player.timeline_changed) catch unreachable;
-
-        player.properties_changed = try session.MediaPropertiesChanged(c.gpa, c, handleProperties);
-        errdefer player.session.RemoveMediaPropertiesChanged(player.properties_changed);
+        if (pixels) |p| {
+            c.cover.update(p.DetachPixelData());
+        } else {
+            c.cover.update(white_pixels);
+        }
 
         c.player = player;
     }
 
-    fn handleTimeline(c: *Context, _: windows.GlobalSystemMediaTransportControlsSession) !void {
-        c.lock.lock();
-        defer c.lock.unlock();
-
-        var player = &(c.player orelse return);
-
-        const timeline = try player.session.GetTimelineProperties();
-        defer timeline.Release();
-
+    fn getTimeline(session: windows.GlobalSystemMediaTransportControlsSession) !Timeline {
         const timestamp = std.time.milliTimestamp();
 
-        player.timeline.last_updated = timestamp;
-        player.timeline.end_time = @divTrunc(timeline.EndTime(), 10000);
-        player.timeline.position = @divTrunc(timeline.Position(), 10000);
+        const timeline = try session.GetTimelineProperties();
+        defer timeline.Release();
+
+        return .{
+            .last_updated = timestamp,
+            .end_time = @divTrunc(timeline.EndTime(), 10000),
+            .position = @divTrunc(timeline.Position(), 10000),
+        };
     }
 
-    fn handleProperties(c: *Context, _: windows.GlobalSystemMediaTransportControlsSession) !void {
-        // todo: we should reduce our locks as these
-        //       random longer locks can cauze some frame drops
-        //       as render thread will wait till this func rasterizes cover image and stuff
-        c.lock.lock();
-        defer c.lock.unlock();
-
-        var player = &(c.player orelse return);
-
-        // todo: update like artist and stuff
-
-        //if (player.cover) |cover| {
-        // todo: think is deinit call is even clear as it just decRef this call is like hidden behaviour
-        //cover.deinit();
-        //player.cover = null;
-        //}
-
-        const properties = try (try player.session.TryGetMediaPropertiesAsync()).getAndForget(c.gpa);
-        defer properties.Release();
-
-        const thumbnail = (try properties.Thumbnail()) orelse {
-            c.cover.update(white_pixels);
-            return;
-        };
-        defer thumbnail.Release();
-
-        const stream = try (try thumbnail.OpenReadAsync()).getAndForget(c.gpa);
+    fn getThumbnailPixels(
+        gpa: Allocator,
+        thumbnail: windows.RandomAccessStreamReference,
+        model_id: []const u16,
+    ) !windows.PixelDataProvider {
+        const stream = try (try thumbnail.OpenReadAsync()).getAndForget(gpa);
         defer stream.Release();
 
-        const decoder = try (try windows.BitmapDecoder.CreateAsync(@ptrCast(stream))).getAndForget(c.gpa);
+        const decoder = try (try windows.BitmapDecoder.CreateAsync(@ptrCast(stream))).getAndForget(gpa);
         defer decoder.Release();
 
-        const frame = try (try decoder.GetFrameAsync(0)).getAndForget(c.gpa);
+        const frame = try (try decoder.GetFrameAsync(0)).getAndForget(gpa);
         defer frame.Release();
 
         const transform = try windows.IBitmapTransform.new();
@@ -158,8 +145,6 @@ const Context = struct {
 
         const spotify_packaged_id = unicode.utf8ToUtf16LeStringLiteral("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify");
         const spotify_unpackaged_id = unicode.utf8ToUtf16LeStringLiteral("Spotify.exe");
-
-        const model_id = try player.session.SourceAppUserModelId();
 
         // crops out Spotifies branding from original thumbnail's image.
         if (mem.eql(u16, model_id, spotify_packaged_id) or mem.eql(u16, model_id, spotify_unpackaged_id)) {
@@ -181,20 +166,46 @@ const Context = struct {
 
         // todo: handle like non square ones
 
-        const pixels = try (try frame.GetPixelDataTransformedAsync(
+        return try (try frame.GetPixelDataTransformedAsync(
             windows.BitmapPixelFormat_Rgba8,
             windows.BitmapAlphaMode_Premultiplied,
             transform,
             windows.ExifOrientationMode_IgnoreExifOrientation,
             windows.ColorManagementMode_DoNotColorManage,
-        )).getAndForget(c.gpa);
-        defer pixels.Release();
+        )).getAndForget(gpa);
+    }
 
-        var ptr: [*]const u8 = undefined;
-        var len: u32 = undefined;
-        pixels.DetachPixelData(&len, &ptr); // todo: add PixelDataProvider
+    fn handleTimeline(c: *Context, _: windows.GlobalSystemMediaTransportControlsSession) !void {
+        c.lock.lock();
+        defer c.lock.unlock();
 
-        c.cover.update(ptr[0..len]);
+        var player = &(c.player orelse return);
+        player.timeline = try getTimeline(player.session);
+    }
+
+    fn handleProperties(c: *Context, session: windows.GlobalSystemMediaTransportControlsSession) !void {
+        const properties = try (try session.TryGetMediaPropertiesAsync()).getAndForget(c.gpa);
+        defer properties.Release();
+
+        const pixels = blk: {
+            const thumbnail = try properties.Thumbnail() orelse break :blk null;
+            defer thumbnail.Release();
+
+            break :blk try getThumbnailPixels(c.gpa, thumbnail, try session.SourceAppUserModelId());
+        };
+        defer if (pixels) |p| p.Release();
+
+        c.lock.lock();
+        defer c.lock.unlock();
+
+        const player = &(c.player orelse return);
+        if (player.session.handle != session.handle) return;
+
+        if (pixels) |p| {
+            c.cover.update(p.DetachPixelData());
+        } else {
+            c.cover.update(white_pixels);
+        }
     }
 
     fn deinit(c: *Context) void {
