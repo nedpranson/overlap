@@ -1,12 +1,12 @@
 const windows = @import("windows.zig");
 const Win32Error = windows.Win32Error;
 
-extern fn DetourTransactionBegin() callconv(.c) windows.LONG;
-extern fn DetourUpdateThread(hThread: windows.HANDLE) callconv(.c) windows.LONG;
-extern fn DetourAttach(ppPointer: *windows.LPVOID, pDetour: windows.LPCVOID) callconv(.c) windows.LONG;
-extern fn DetourDetach(ppPointer: *windows.LPVOID, pDetour: windows.LPCVOID) callconv(.c) windows.LONG;
-extern fn DetourTransactionCommit() callconv(.c) windows.LONG;
-extern fn DetourTransactionAbort() callconv(.c) windows.LONG;
+extern fn DetourTransactionBegin() callconv(.winapi) windows.LONG;
+extern fn DetourUpdateThread(hThread: windows.HANDLE) callconv(.winapi) windows.LONG;
+extern fn DetourAttach(ppPointer: *windows.LPVOID, pDetour: windows.LPCVOID) callconv(.winapi) windows.LONG;
+extern fn DetourDetach(ppPointer: *windows.LPVOID, pDetour: windows.LPCVOID) callconv(.winapi) windows.LONG;
+extern fn DetourTransactionCommit() callconv(.winapi) windows.LONG;
+extern fn DetourTransactionAbort() callconv(.winapi) windows.LONG;
 
 pub const TransactionBeginError = error{
     PendingTransaction,

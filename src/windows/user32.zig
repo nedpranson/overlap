@@ -1,8 +1,10 @@
 const windows = @import("../windows.zig");
+const builtin = @import("builtin");
 
 const HWND = windows.HWND;
 const BOOL = windows.BOOL;
 const UINT = windows.UINT;
+const LONG = windows.LONG;
 const HMENU = windows.HMENU;
 const DWORD = windows.DWORD;
 const WPARAM = windows.WPARAM;
@@ -25,11 +27,16 @@ pub extern "user32" fn FindWindowA(lpClassName: ?LPCSTR, lpWindowName: ?LPCSTR) 
 
 pub extern "user32" fn GetWindowRect(hWnd: HWND, lpRect: LPRECT) callconv(.winapi) BOOL;
 
-// todo: on 32bit use SetWindowLong
 pub extern "user32" fn SetWindowLongPtrA(
     hWnd: HWND,
     nIndex: c_int,
     dwNewLong: LONG_PTR,
+) callconv(.winapi) LONG_PTR;
+
+pub extern "user32" fn SetWindowLongA(
+    hWnd: HWND,
+    nIndex: c_int,
+    dwNewLong: LONG,
 ) callconv(.winapi) LONG_PTR;
 
 pub extern "user32" fn CallWindowProcA(
@@ -86,4 +93,4 @@ pub extern "user32" fn CreateWindowExA(
     lpParam: ?LPVOID,
 ) callconv(.winapi) ?HWND;
 
-pub extern "user32" fn DestroyWindow(hWnd: HWND) BOOL;
+pub extern "user32" fn DestroyWindow(hWnd: HWND) callconv(.winapi) BOOL;

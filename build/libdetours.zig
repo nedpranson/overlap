@@ -27,8 +27,35 @@ pub fn buildLibrary(b: *std.Build, options: anytype) *std.Build.Step.Compile {
         lib.linkLibCpp();
     }
 
+    var cflags_buf: [5][]const u8 = undefined;
+    var cflags = std.ArrayList([]const u8).initBuffer(&cflags_buf);
+
+    cflags.appendBounded("-fno-sanitize=undefined") catch unreachable;
+    cflags.appendBounded("-DWIN32_LEAN_AND_MEAN") catch unreachable;
+
+    switch (target.result.cpu.arch) {
+        .x86 => {
+            cflags.appendBounded("-DDETOURS_X86") catch unreachable;
+            cflags.appendBounded("-DDETOURS_32BIT") catch unreachable;
+        },
+        .x86_64 => {
+            cflags.appendBounded("-DDETOURS_X64") catch unreachable;
+            cflags.appendBounded("-DDETOURS_64BIT") catch unreachable;
+        },
+        .arm => {
+            cflags.appendBounded("-DDETOURS_ARM") catch unreachable;
+            cflags.appendBounded("-DDETOURS_32BIT") catch unreachable;
+        },
+        .aarch64 => {
+            cflags.appendBounded("-DDETOURS_ARM64") catch unreachable;
+            cflags.appendBounded("-DDETOURS_64BIT") catch unreachable;
+        },
+        else => {
+            std.debug.panic("Unsupported CPU architecture: {}", .{target.result.cpu.arch});
+        },
+    }
+
     lib.addIncludePath(detours.path("src"));
-    lib.root_module.addCMacro("WIN32_LEAN_AND_MEAN", "");
 
     lib.addCSourceFiles(.{
         .root = detours.path("src"),
@@ -44,35 +71,8 @@ pub fn buildLibrary(b: *std.Build, options: anytype) *std.Build.Step.Compile {
             "image.cpp",
             "modules.cpp",
         },
-        .flags = &.{
-            "-fno-sanitize=undefined",
-        },
+        .flags = cflags.items,
     });
-
-    // todo: just add flags
-
-    switch (target.result.cpu.arch) {
-        .x86 => {
-            lib.root_module.addCMacro("DETOURS_X86", "1");
-        },
-        .x86_64 => {
-            lib.root_module.addCMacro("DETOURS_X64", "1");
-            lib.root_module.addCMacro("DETOURS_64BIT", "1");
-        },
-        .arm => {
-            lib.root_module.addCMacro("DETOURS_ARM", "1");
-        },
-        .aarch64 => {
-            lib.root_module.addCMacro("DETOURS_ARM64", "1");
-            lib.root_module.addCMacro("DETOURS_64BIT", "1");
-        },
-        else => {
-            std.debug.panic(
-                "Unsupported CPU architecture: {}",
-                .{target.result.cpu.arch},
-            );
-        },
-    }
 
     b.installArtifact(lib);
 

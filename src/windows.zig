@@ -643,6 +643,7 @@ pub fn SetWindowLongPtr(
     nIndex: c_int,
     dwNewLong: LONG_PTR,
 ) SetWindowLongPtrError!LONG_PTR {
+    // on 32 bit call 32 bit one!
     const res = user32.SetWindowLongPtrA(hWnd, nIndex, dwNewLong);
     if (res == 0) {
         return switch (windows.kernel32.GetLastError()) {
@@ -1225,7 +1226,6 @@ pub const PixelDataProvider = struct {
         self.handle.DetachPixelData(&len, &ptr);
         return ptr[0..len];
     }
-
 };
 
 pub const GlobalSystemMediaTransportControlsSessionMediaProperties = struct {

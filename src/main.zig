@@ -216,7 +216,6 @@ const Context = struct {
         };
         defer if (pixels) |p| p.Release();
 
-
         const title = properties.Title();
         const artist = properties.Artist();
 

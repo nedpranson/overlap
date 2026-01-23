@@ -22,6 +22,6 @@ pub extern "kernel32" fn GetProcAddress(hModule: HMODULE, lpProcName: LPCSTR) ca
 
 pub extern "kernel32" fn SetConsoleTitleA(lpConsoleTitle: LPCSTR) callconv(.winapi) BOOL;
 
-pub extern "kernel32" fn OutputDebugStringA(lpOutputString: LPCSTR) void;
+pub extern "kernel32" fn OutputDebugStringA(lpOutputString: LPCSTR) callconv(.winapi) void;
 
-pub extern "kernel32" fn OutputDebugStringW(lpOutputString: LPCWSTR) void;
+pub extern "kernel32" fn OutputDebugStringW(lpOutputString: LPCWSTR) callconv(.winapi) void;
