@@ -316,13 +316,18 @@ pub const Device = struct {
         device.device_context.PSSetSamplers(0, (&device.sampler)[0..1]);
 
         var index_off: windows.UINT = 0;
+        var prev_srv_id: usize = 0;
         for (draw_commands) |cmd| {
-            const srv: *d3d11.ID3D11ShaderResourceView = @ptrCast(@alignCast(load_srv(device, cmd.image)));
-            defer cmd.image.remRef();
+            const srv_id = @intFromPtr(cmd.image);
+            if (prev_srv_id != srv_id) {
+                const srv: *d3d11.ID3D11ShaderResourceView = @ptrCast(@alignCast(load_srv(device, cmd.image)));
+                device.device_context.PSSetShaderResources(0, (&srv)[0..1]);
+                prev_srv_id = srv_id;
+            }
 
-            device.device_context.PSSetShaderResources(0, (&srv)[0..1]);
             device.device_context.DrawIndexed(@intCast(cmd.index_len), index_off, cmd.base_vertex);
 
+            cmd.image.remRef();
             index_off += @intCast(cmd.index_len);
         }
     }

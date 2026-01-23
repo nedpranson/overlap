@@ -138,25 +138,10 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
 
     if (self.draw_verticies.items.len + draw_cmd.verticies.len > self.draw_verticies.capacity) return;
     if (self.draw_indecies.items.len + draw_cmd.indecies.len > self.draw_indecies.capacity) return;
-
-    const reuse_image = blk: {
-        const last_draw_cmd = self.draw_commands.getLastOrNull() orelse break :blk false;
-        break :blk last_draw_cmd.image == draw_cmd.image;
-    };
-
-    if (!reuse_image) {
-        if (self.draw_commands.items.len == self.draw_commands.capacity) return;
-    }
+    if (self.draw_commands.items.len == self.draw_commands.capacity) return;
 
     self.draw_verticies.appendSliceAssumeCapacity(draw_cmd.verticies);
     self.draw_indecies.appendSliceAssumeCapacity(draw_cmd.indecies);
-
-    if (reuse_image) {
-        const last_draw_cmd = &self.draw_commands.items[self.draw_commands.items.len - 1];
-        last_draw_cmd.index_len += @intCast(draw_cmd.indecies.len);
-
-        return;
-    }
 
     // need to add ref to prevent image from disapearing
     // rendering backend (like d3d11) will be responsible to releasing this added ref
