@@ -63,6 +63,7 @@ const Context = struct {
             .session_changed = undefined,
         };
 
+        ctx_enabled = true;
         try handleSession(c, c.manager);
 
         c.session_changed = try manager.CurrentSessionChanged(gpa, c, handleSession);
@@ -70,8 +71,6 @@ const Context = struct {
     }
 
     fn handleSession(c: *Context, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
-        // todo: c* can be invalid!!!
-        //       add alive flag or smth
         var player: ?Player = null;
         var pixels: ?windows.PixelDataProvider = null;
         defer if (pixels) |p| p.Release();
@@ -114,6 +113,11 @@ const Context = struct {
 
         c.lock.lock();
         defer c.lock.unlock();
+
+        if (!ctx_enabled) {
+            @branchHint(.cold);
+            return;
+        }
 
         if (c.player) |old_player| {
             old_player.session.RemoveTimelinePropertiesChanged(old_player.timeline_changed) catch unreachable;
@@ -178,12 +182,33 @@ const Context = struct {
                 .Width = 64,
                 .Height = 64,
             });
+        } else if (frame.PixelWidth() != frame.PixelHeight()) {
+            const fwidth: f32 = @floatFromInt(frame.PixelWidth());
+            const fheight: f32 = @floatFromInt(frame.PixelHeight());
+
+            const aspect = fwidth / fheight;
+
+            const scaled_width: u32 = @intFromFloat(64.0 * @max(1.0, aspect));
+            const scaled_height: u32 = @intFromFloat(64.0 / @min(1.0, aspect));
+
+            transform.put_ScaledWidth(scaled_width);
+            transform.put_ScaledHeight(scaled_height);
+
+            const side = @min(scaled_width, scaled_height);
+
+            const off_x = (side - scaled_width) >> 1;
+            const off_y = (side - scaled_height) >> 1;
+
+            transform.put_Bounds(.{
+                .X = off_x,
+                .Y = off_y,
+                .Width = 64,
+                .Height = 64,
+            });
         } else {
             transform.put_ScaledHeight(64);
             transform.put_ScaledWidth(64);
         }
-
-        // todo: handle like non square ones
 
         return try (try frame.GetPixelDataTransformedAsync(
             windows.BitmapPixelFormat_Rgba8,
@@ -195,16 +220,19 @@ const Context = struct {
     }
 
     fn handleTimeline(c: *Context, _: windows.GlobalSystemMediaTransportControlsSession) !void {
-        // todo: c* can be invalid!!!
         c.lock.lock();
         defer c.lock.unlock();
+
+        if (!ctx_enabled) {
+            @branchHint(.cold);
+            return;
+        }
 
         var player = &(c.player orelse return);
         player.timeline = try getTimeline(player.session);
     }
 
     fn handleProperties(c: *Context, session: windows.GlobalSystemMediaTransportControlsSession) !void {
-        // todo: c* can be invalid!!!
         const properties = try (try session.TryGetMediaPropertiesAsync()).getAndForget(c.gpa);
         defer properties.Release();
 
@@ -225,6 +253,11 @@ const Context = struct {
         c.lock.lock();
         defer c.lock.unlock();
 
+        if (!ctx_enabled) {
+            @branchHint(.cold);
+            return;
+        }
+
         const player = &(c.player orelse return);
         if (player.session.handle != session.handle) return;
 
@@ -242,6 +275,9 @@ const Context = struct {
     }
 
     fn deinit(c: *Context) void {
+        c.lock.lock();
+        ctx_enabled = false;
+
         c.manager.RemoveCurrentSessionChanged(c.session_changed) catch unreachable;
 
         if (c.player) |player| {
@@ -250,11 +286,9 @@ const Context = struct {
             player.session.Release();
         }
 
-        // wait till all work is done! like in handleSessions and other handles
-        // as now as we deinit object handleSession can be running
-
         c.manager.Release();
         c.cover.deinit();
+        c.lock.unlock();
 
         c.* = undefined;
     }
@@ -312,6 +346,9 @@ const Context = struct {
 };
 
 var ctx: Context = undefined;
+// todo: one day we could add some ref to event handler and when it's count reaches 0
+//       we can be asured no more callbacks will ever be called
+var ctx_enabled = false;
 
 pub fn setup(gpa: Allocator) !void {
     try windows.RoInitialize(windows.RO_INIT_MULTITHREADED);

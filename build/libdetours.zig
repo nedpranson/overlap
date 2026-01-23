@@ -19,7 +19,7 @@ pub fn buildLibrary(b: *std.Build, options: anytype) *std.Build.Step.Compile {
         .optimize = optimize,
     });
 
-    // if compiling with msvc we need to link with libc not libcpp
+    // when compiling with msvc is is needed to link with libc not libcpp
     // https://github.com/ziglang/zig/issues/5312
     if (target.result.abi == .msvc) {
         lib.linkLibC();
@@ -27,28 +27,28 @@ pub fn buildLibrary(b: *std.Build, options: anytype) *std.Build.Step.Compile {
         lib.linkLibCpp();
     }
 
-    var cflags_buf: [5][]const u8 = undefined;
-    var cflags = std.ArrayList([]const u8).initBuffer(&cflags_buf);
+    var flags_buf: [5][]const u8 = undefined;
+    var flags = std.ArrayList([]const u8).initBuffer(&flags_buf);
 
-    cflags.appendBounded("-fno-sanitize=undefined") catch unreachable;
-    cflags.appendBounded("-DWIN32_LEAN_AND_MEAN") catch unreachable;
+    flags.appendAssumeCapacity("-fno-sanitize=undefined");
+    flags.appendAssumeCapacity("-DWIN32_LEAN_AND_MEAN");
 
     switch (target.result.cpu.arch) {
         .x86 => {
-            cflags.appendBounded("-DDETOURS_X86") catch unreachable;
-            cflags.appendBounded("-DDETOURS_32BIT") catch unreachable;
+            flags.appendAssumeCapacity("-DDETOURS_X86");
+            flags.appendAssumeCapacity("-DDETOURS_32BIT");
         },
         .x86_64 => {
-            cflags.appendBounded("-DDETOURS_X64") catch unreachable;
-            cflags.appendBounded("-DDETOURS_64BIT") catch unreachable;
+            flags.appendAssumeCapacity("-DDETOURS_X64");
+            flags.appendAssumeCapacity("-DDETOURS_64BIT");
         },
         .arm => {
-            cflags.appendBounded("-DDETOURS_ARM") catch unreachable;
-            cflags.appendBounded("-DDETOURS_32BIT") catch unreachable;
+            flags.appendAssumeCapacity("-DDETOURS_ARM");
+            flags.appendAssumeCapacity("-DDETOURS_32BIT");
         },
         .aarch64 => {
-            cflags.appendBounded("-DDETOURS_ARM64") catch unreachable;
-            cflags.appendBounded("-DDETOURS_64BIT") catch unreachable;
+            flags.appendAssumeCapacity("-DDETOURS_ARM64");
+            flags.appendAssumeCapacity("-DDETOURS_64BIT");
         },
         else => {
             std.debug.panic("Unsupported CPU architecture: {}", .{target.result.cpu.arch});
@@ -71,7 +71,7 @@ pub fn buildLibrary(b: *std.Build, options: anytype) *std.Build.Step.Compile {
             "image.cpp",
             "modules.cpp",
         },
-        .flags = cflags.items,
+        .flags = flags.items,
     });
 
     b.installArtifact(lib);
