@@ -194,10 +194,8 @@ const Context = struct {
             transform.put_ScaledWidth(scaled_width);
             transform.put_ScaledHeight(scaled_height);
 
-            const side = @min(scaled_width, scaled_height);
-
-            const off_x = (side - scaled_width) >> 1;
-            const off_y = (side - scaled_height) >> 1;
+            const off_x = (scaled_width - 64) >> 1;
+            const off_y = (scaled_height - 64) >> 1;
 
             transform.put_Bounds(.{
                 .X = off_x,
