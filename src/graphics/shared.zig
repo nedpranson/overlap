@@ -10,6 +10,7 @@ pub const DrawIndex = u16;
 pub const DrawCommand = struct {
     image: *Image,
     index_len: DrawIndex,
+    base_vertex: DrawIndex,
 };
 
 pub const DrawVertex = extern struct {

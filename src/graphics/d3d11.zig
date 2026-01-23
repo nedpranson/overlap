@@ -315,36 +315,13 @@ pub const Device = struct {
         device.device_context.PSSetShader(device.pixel_shader, null);
         device.device_context.PSSetSamplers(0, (&device.sampler)[0..1]);
 
-        //var white_pixel_tex: *d3d11.ID3D11Texture2D = undefined;
-        //var white_pixel_srv: *d3d11.ID3D11ShaderResourceView = undefined;
-
-        //var texture_desc = mem.zeroes(d3d11.D3D11_TEXTURE2D_DESC);
-        //texture_desc.Width = 1;
-        //texture_desc.Height = 1;
-        //texture_desc.MipLevels = 1;
-        //texture_desc.ArraySize = 1;
-        //texture_desc.Format = dxgi.DXGI_FORMAT_R8_UNORM;
-        //texture_desc.SampleDesc.Count = 1;
-        //texture_desc.Usage = d3d11.D3D11_USAGE_DEFAULT;
-        //texture_desc.BindFlags = d3d11.D3D11_BIND_SHADER_RESOURCE;
-
-        //var initial_data = mem.zeroes(d3d11.D3D11_SUBRESOURCE_DATA);
-        //initial_data.pSysMem = &[1]u8{0xFF};
-        //initial_data.SysMemPitch = 1;
-
-        //try device.device.CreateTexture2D(&texture_desc, &initial_data, &white_pixel_tex);
-        //defer white_pixel_tex.Release();
-
-        //try device.device.CreateShaderResourceView(@ptrCast(white_pixel_tex), null, &white_pixel_srv);
-        //defer white_pixel_srv.Release();
-
         var index_off: windows.UINT = 0;
         for (draw_commands) |cmd| {
             const srv: *d3d11.ID3D11ShaderResourceView = @ptrCast(@alignCast(load_srv(device, cmd.image)));
             defer cmd.image.remRef();
 
             device.device_context.PSSetShaderResources(0, (&srv)[0..1]);
-            device.device_context.DrawIndexed(@intCast(cmd.index_len), index_off, 0); // todo: use third argument
+            device.device_context.DrawIndexed(@intCast(cmd.index_len), index_off, cmd.base_vertex);
 
             index_off += @intCast(cmd.index_len);
         }

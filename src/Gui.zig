@@ -133,9 +133,8 @@ pub fn textW(gui: *Gui, pos: [2]f32, msg: []const u16, descriptor: Descriptor) v
     }
 }
 
-// todo: on debug we can check if indecie are like in bounds
 fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
-    const amt: shared.DrawIndex = @intCast(self.draw_verticies.items.len);
+    const base_vertex: shared.DrawIndex = @intCast(self.draw_verticies.items.len);
 
     if (self.draw_verticies.items.len + draw_cmd.verticies.len > self.draw_verticies.capacity) return;
     if (self.draw_indecies.items.len + draw_cmd.indecies.len > self.draw_indecies.capacity) return;
@@ -150,11 +149,7 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
     }
 
     self.draw_verticies.appendSliceAssumeCapacity(draw_cmd.verticies);
-
-    for (draw_cmd.indecies) |idx| {
-        // todo: update base idx at render call
-        self.draw_indecies.appendAssumeCapacity(amt + idx);
-    }
+    self.draw_indecies.appendSliceAssumeCapacity(draw_cmd.indecies);
 
     if (reuse_image) {
         const last_draw_cmd = &self.draw_commands.items[self.draw_commands.items.len - 1];
@@ -170,5 +165,6 @@ fn addDrawCommand(self: *Gui, draw_cmd: DrawCommand) void {
     self.draw_commands.appendAssumeCapacity(.{
         .image = draw_cmd.image,
         .index_len = @intCast(draw_cmd.indecies.len),
+        .base_vertex = base_vertex,
     });
 }
