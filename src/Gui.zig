@@ -90,13 +90,13 @@ pub const Descriptor = struct {
 
 // as now we're not using kerning or shaping it's all good, later if we will choose todo these stuff
 // we will need to pass in a string to compite its width or some other work around
-pub fn advanceWidth(self: *Gui, codepoint: u21, descriptor: Descriptor) !u32 {
-    const glyph = try self.font_renderer.getGlyph(.{ .size = @bitCast(descriptor.size), .codepoint = codepoint });
+pub fn advanceWidth(_: *Gui, codepoint: u21, descriptor: Descriptor) u32 {
+    const glyph = @import("renderer.zig").font_renderer.getGlyph(.{ .size = @bitCast(descriptor.size), .codepoint = codepoint }) catch return 0;
     return glyph.metrics.advance_x;
 }
 
-pub fn advanceWidthf(self: *Gui, codepoint: u21, descriptor: Descriptor) !f32 {
-    return @floatFromInt(try advanceWidth(self, codepoint, descriptor));
+pub fn advanceWidthf(self: *Gui, codepoint: u21, descriptor: Descriptor) f32 {
+    return @floatFromInt(advanceWidth(self, codepoint, descriptor));
 }
 
 pub fn textW(gui: *Gui, pos: [2]f32, msg: []const u16, descriptor: Descriptor) void {

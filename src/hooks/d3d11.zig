@@ -299,6 +299,7 @@ fn Present(
         threadlocal var draw_verticies: [shared.max_verticies]shared.DrawVertex = undefined;
         threadlocal var draw_indicies: [shared.max_indicies]shared.DrawIndex = undefined;
 
+        // todo: tbf anly Allocator.Error or Backend.Error should be returned here
         fn loadSRV(device: *graphics.d3d11.Device, img: *Image) *anyopaque {
             var ins: *Instance = @fieldParentPtr("device", device);
 

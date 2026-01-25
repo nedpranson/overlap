@@ -37,6 +37,7 @@ pub const Resource = struct {
 };
 
 // todo: make load_resource take in like a funciton ptr
+//       or we can make Backends an actualt interface
 pub const VTable = struct {
     destroy: *const fn (img: *Image) void,
     update: *const fn (img: *Image, data: []const u8) void,

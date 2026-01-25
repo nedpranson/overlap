@@ -11,6 +11,9 @@ const Thread = std.Thread;
 // when dumping a stack trace
 // we're reacching stack overflows
 
+// before releasing alpha version:
+// * make font renderer thread safe
+
 const Context = struct {
     gpa: Allocator,
 
@@ -390,6 +393,36 @@ pub fn render(gui: *Gui) void {
 
     gui.image(.{ pos[x], pos[y] }, .{ pos[x] + 64.0, pos[y] + 64.0 }, playback_info.cover);
 
-    gui.textW(.{ pos[x] + image_size + padding, pos[y] + padding }, playback_info.title(), .{ .size = 10.0 });
-    gui.textW(.{ pos[x] + image_size + padding, pos[y] + padding + 20.0 }, playback_info.artist(), .{ .size = 10.0, .color = 0x808080FF });
+    ellipsisW(gui, .{ pos[x] + image_size + padding, pos[y] + padding }, playback_info.title(), width, .{ .size = 10.0 });
+    ellipsisW(gui, .{ pos[x] + image_size + padding, pos[y] + padding + 20.0 }, playback_info.artist(), width, .{ .size = 10.0, .color = 0x808080FF });
+}
+
+fn ellipsisW(gui: *Gui, pos: [2]f32, msg: []const u16, width: f32, descriptor: Gui.Descriptor) void {
+    const suffix_width = gui.advanceWidthf('…', descriptor);
+
+    var text_width: f32 = 0.0;
+    var cut_width: f32 = 0.0;
+    var cut_units: usize = 0;
+
+    var it = unicode.Wtf16LeIterator.init(msg);
+    while (it.nextCodepoint()) |codepoint| {
+        text_width += gui.advanceWidthf(codepoint, descriptor);
+
+        if (text_width > width) {
+            break;
+        }
+
+        if (codepoint != ' ' and width >= text_width + suffix_width) {
+            cut_width = text_width;
+            cut_units = it.i >> 1;
+        }
+    }
+
+    if (width >= text_width) {
+        gui.textW(pos, msg, descriptor);
+        return;
+    }
+
+    gui.textW(pos, msg[0..cut_units], descriptor);
+    gui.textW(.{ pos[0] + cut_width, pos[1] }, unicode.wtf8ToWtf16LeStringLiteral("…"), descriptor);
 }
