@@ -86,11 +86,18 @@ pub const Descriptor = struct {
     color: u32 = 0xFFFFFFFF,
 };
 
+// todo: remove mutex as make FontRenderer threadsafe
+//       this is just a dirty fix
+var lock: std.Thread.Mutex = .{};
+
 // text functions are not threadsafe!!!!!!!!!
 
 // as now we're not using kerning or shaping it's all good, later if we will choose todo these stuff
 // we will need to pass in a string to compite its width or some other work around
 pub fn advanceWidth(_: *Gui, codepoint: u21, descriptor: Descriptor) u32 {
+    lock.lock();
+    defer lock.unlock();
+
     const glyph = @import("renderer.zig").font_renderer.getGlyph(.{ .size = @bitCast(descriptor.size), .codepoint = codepoint }) catch return 0;
     return glyph.metrics.advance_x;
 }
@@ -101,6 +108,9 @@ pub fn advanceWidthf(self: *Gui, codepoint: u21, descriptor: Descriptor) f32 {
 
 pub fn textW(gui: *Gui, pos: [2]f32, msg: []const u16, descriptor: Descriptor) void {
     var it = unicode.Wtf16LeIterator.init(msg);
+
+    lock.lock();
+    defer lock.unlock();
 
     var advance: f32 = 0.0;
     while (it.nextCodepoint()) |codepoint| {

@@ -11,9 +11,6 @@ const Thread = std.Thread;
 // when dumping a stack trace
 // we're reacching stack overflows
 
-// before releasing alpha version:
-// * make font renderer thread safe
-
 const Context = struct {
     gpa: Allocator,
 

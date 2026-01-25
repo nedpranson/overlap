@@ -57,7 +57,7 @@ var zelf: ?@This() = null;
 pub fn attach(gpa: Allocator, d3d11_lib: windows.HMODULE) bool {
     assert(zelf == null);
 
-    windows.AllocConsole() catch {};
+    //windows.AllocConsole() catch {};
 
     const window = windows.CreateWindowEx(
         0,
@@ -228,7 +228,7 @@ pub fn detach() void {
 
     hook.instance_map.deinit(hook.allocator);
 
-    windows.FreeConsole() catch {};
+    //windows.FreeConsole() catch {};
     zelf = null;
 }
 
