@@ -30,6 +30,6 @@ Overlap is an overlay designed to seamlessly see and control your music in-game.
     - [ ] Vulkan
 - **Playback Controls:** Manage and play/pause tracks.
 
-## ⚖️ Licens
+## ⚖️ Licene
 
 Overlap is released under the [GPL-3.0 License](https://www.gnu.org/licenses/gpl-3.0.html).
