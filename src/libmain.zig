@@ -3,13 +3,31 @@ const windows = @import("windows.zig");
 const hooks = @import("hooks.zig");
 const renderer = @import("renderer.zig");
 const atomic = std.atomic;
+
 const log = std.log.scoped(.entry);
+const fs = std.fs;
 
 var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
 
 fn setup() bool {
     const allocator = gpa.allocator();
 
+    const app_data_dir = fs.getAppDataDir(allocator, "Overlap") catch return false;
+    defer allocator.free(app_data_dir);
+
+    fs.makeDirAbsolute(app_data_dir) catch return false;
+
+    const log_file_path = fs.path.join(allocator, &[_][]const u8{ app_data_dir, "logs.txt" }) catch return false;
+    defer allocator.free(log_file_path);
+
+    // close file later
+    const log_file = fs.openFileAbsolute(log_file_path, .{ .mode = .write_only, .lock = .exclusive }) catch return false;
+    windows.SetStdHandle(windows.STD_ERROR_HANDLE, log_file.handle) catch {
+        log_file.close();
+        return false;
+    };
+
+    log.info("{s}\n", .{log_file_path});
     log.info("attaching overlay hooks", .{});
     return hooks.init(allocator);
 }
@@ -79,9 +97,10 @@ fn logFn(
         break :blk buffer[0 .. buffer.len - 1 :0];
     };
 
+    std.debug.print();
     windows.OutputDebugString(msg);
 }
 
-pub const std_options: std.Options = .{
-    .logFn = logFn,
-};
+//pub const std_options: std.Options = .{
+    //.logFn = logFn,
+//};

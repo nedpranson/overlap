@@ -55,6 +55,9 @@ pub const LONG_PTR = windows.LONG_PTR;
 pub const HINSTANCE = windows.HINSTANCE;
 pub const HRESULT_CODE = windows.HRESULT_CODE;
 pub const E_NOINTERFACE = windows.E_NOINTERFACE;
+pub const STD_INPUT_HANDLE = windows.STD_INPUT_HANDLE;
+pub const STD_OUTPUT_HANDLE = windows.STD_OUTPUT_HANDLE;
+pub const STD_ERROR_HANDLE = windows.STD_ERROR_HANDLE;
 
 pub const GetCurrentProcessId = windows.GetCurrentProcessId;
 pub const GetCurrentThreadId = windows.GetCurrentThreadId;
@@ -232,6 +235,18 @@ pub const WINHTTP_DEFAULT_ACCEPT_TYPES = &[_:null]?LPCWSTR{
 pub const WINHTTP_QUERY_CONTENT_LENGTH = 5;
 pub const WINHTTP_QUERY_STATUS_CODE = 19;
 pub const WINHTTP_QUERY_FLAG_NUMBER = 0x20000000;
+
+pub const SetStdHandleError = error{
+    Unexpected,
+};
+
+pub fn SetStdHandle(nStdHandle: DWORD, hHandle: HANDLE) SetStdHandleError!void {
+    if (kernel32.SetStdHandle(nStdHandle, hHandle) == FALSE) {
+        return switch (windows.GetLastError()) {
+            else => |err| windows.unexpectedError(err),
+        };
+    }
+}
 
 pub const CreateWindowExError = error{
     Unexpected,

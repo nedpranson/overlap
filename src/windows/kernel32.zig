@@ -3,10 +3,13 @@ const windows = std.os.windows;
 
 const BOOL = windows.BOOL;
 const DWORD = windows.DWORD;
+const HANDLE = windows.HANDLE;
 const LPCSTR = windows.LPCSTR;
 const LPCWSTR = windows.LPCWSTR;
 const HMODULE = windows.HMODULE;
 const FARPROC = windows.FARPROC;
+
+pub extern "kernel32" fn SetStdHandle(nStdHandle: DWORD, hHandle: HANDLE) callconv(.winapi) BOOL;
 
 pub extern "kernel32" fn DisableThreadLibraryCalls(hLibModule: HMODULE) callconv(.winapi) BOOL;
 
