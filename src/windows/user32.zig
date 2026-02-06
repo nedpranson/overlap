@@ -101,3 +101,10 @@ pub extern "user32" fn PostThreadMessageA(
     wParam: WPARAM,
     lParam: LPARAM,
 ) callconv(.winapi) BOOL;
+
+pub extern "user32" fn PostMessageA(
+    hWnd: HWND,
+    Msg: UINT,
+    wParam: WPARAM,
+    lParam: LPARAM,
+) callconv(.winapi) BOOL;

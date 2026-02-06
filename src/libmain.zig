@@ -14,10 +14,9 @@ fn setup() bool {
     const allocator = gpa.allocator();
 
     const wnd = windows.FindWindow("OverlapLauncherClass", null) orelse return false;
-    const tid, _ = windows.GetWindowThreadProcessId(wnd) catch return false;
-
     const WM_HOOKNOTIFY = windows.WM_USER + 2;
-    windows.PostThreadMessage(tid, WM_HOOKNOTIFY, windows.GetCurrentProcessId(), 0) catch return false;
+
+    windows.PostMessage(wnd, WM_HOOKNOTIFY, windows.GetCurrentProcessId(), 0) catch return false;
 
     log.info("attaching overlay hooks", .{});
     return hooks.init(allocator);
@@ -101,6 +100,8 @@ fn logFn(
 ) void {
     const level_txt = comptime message_level.asText();
     const prefix2 = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
+
+    // send WM_COPY to launcher app
 
     _ = level_txt;
     _ = prefix2;

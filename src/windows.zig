@@ -382,11 +382,23 @@ pub fn PostThreadMessage(idThread: u32, Msg: UINT, wParam: WPARAM, lParam: LPARA
     }
 }
 
+pub const PostMessageError = error{
+    Unexpected,
+};
+
+pub fn PostMessage(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) PostMessageError!void {
+    if (user32.PostMessageA(hWnd, Msg, wParam, lParam) == windows.FALSE) {
+        return switch (windows.kernel32.GetLastError()) {
+            else => |err| windows.unexpectedError(err),
+        };
+    }
+}
+
 pub const GetWindowThreadProcessIdError = error{
     Unexpected,
 };
 
-pub fn GetWindowThreadProcessId(hWnd: HWND) GetWindowThreadProcessIdError!struct { u32, u32 } {
+pub fn GetWindowThreadProcessId(hWnd: HWND) GetWindowThreadProcessIdError!struct { DWORD, DWORD } {
     var pid: DWORD = 0;
     const tid = user32.GetWindowThreadProcessId(hWnd, &pid);
 
