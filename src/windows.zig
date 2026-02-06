@@ -52,6 +52,7 @@ pub const HRESULT = windows.HRESULT;
 pub const LPVOID = windows.LPVOID;
 pub const LPCVOID = windows.LPCVOID;
 pub const LONG_PTR = windows.LONG_PTR;
+pub const ULONG_PTR = windows.ULONG_PTR;
 pub const HINSTANCE = windows.HINSTANCE;
 pub const HRESULT_CODE = windows.HRESULT_CODE;
 pub const E_NOINTERFACE = windows.E_NOINTERFACE;
@@ -67,6 +68,12 @@ pub const GetWindow = user32.GetWindow;
 pub const GetAncestor = user32.GetAncestor;
 pub const EnumWindows = user32.EnumWindows;
 pub const GetCurrentThread = windows.GetCurrentThread;
+
+pub const COPYDATASTRUCT = extern struct {
+    dwData: ULONG_PTR,
+    cbData: DWORD,
+    lpData: PVOID,
+};
 
 pub const TimeSpan = extern struct {
     Duration: i64,
@@ -134,6 +141,7 @@ pub const Callback = winrt.Callback;
 pub const Callback2 = winrt.Callback2;
 pub const LPUNKNOWN = **IUnknown;
 
+pub const WM_COPYDATA = 0x004A;
 pub const WM_MOUSEMOVE = 0x0200;
 pub const WM_LBUTTONDOWN = 0x0201;
 pub const WM_LBUTTONUP = 0x0202;
@@ -377,6 +385,18 @@ pub fn PostThreadMessage(idThread: u32, Msg: UINT, wParam: WPARAM, lParam: LPARA
         return switch (windows.kernel32.GetLastError()) {
             .INVALID_THREAD_ID => error.InvalidThreadId,
             .NOT_ENOUGH_QUOTA => error.MessageLimitReached,
+            else => |err| windows.unexpectedError(err),
+        };
+    }
+}
+
+pub const SendMessageError = error{
+    Unexpected,
+};
+
+pub fn SendMessage(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) SendMessageError!void {
+    if (user32.SendMessageA(hWnd, Msg, wParam, lParam) == windows.FALSE) {
+        return switch (windows.kernel32.GetLastError()) {
             else => |err| windows.unexpectedError(err),
         };
     }
