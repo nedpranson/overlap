@@ -139,6 +139,7 @@ pub const WM_LBUTTONDOWN = 0x0201;
 pub const WM_LBUTTONUP = 0x0202;
 pub const WM_RBUTTONDOWN = 0x0204;
 pub const WM_RBUTTONUP = 0x0205;
+pub const WM_USER = 0x0400;
 
 pub const HSTRING_HEADER = extern union {
     Reserved1: PVOID,
@@ -365,14 +366,32 @@ pub fn DisableThreadLibraryCalls(hLibModule: windows.HMODULE) DisableThreadLibra
     }
 }
 
+pub const PostThreadMessageError = error{
+    InvalidThreadId,
+    MessageLimitReached,
+    Unexpected,
+};
+
+pub fn PostThreadMessage(idThread: u32, Msg: UINT, wParam: WPARAM, lParam: LPARAM) PostThreadMessageError!void {
+    if (user32.PostThreadMessageA(idThread, Msg, wParam, lParam) == windows.FALSE) {
+        return switch (windows.kernel32.GetLastError()) {
+            .INVALID_THREAD_ID => error.InvalidThreadId,
+            .NOT_ENOUGH_QUOTA => error.MessageLimitReached,
+            else => |err| windows.unexpectedError(err),
+        };
+    }
+}
+
 pub const GetWindowThreadProcessIdError = error{
     Unexpected,
 };
 
-pub fn GetWindowThreadProcessId(hWnd: HWND) GetWindowThreadProcessIdError!u32 {
+pub fn GetWindowThreadProcessId(hWnd: HWND) GetWindowThreadProcessIdError!struct { u32, u32 } {
     var pid: DWORD = 0;
-    if (user32.GetWindowThreadProcessId(hWnd, &pid) != 0) {
-        return pid;
+    const tid = user32.GetWindowThreadProcessId(hWnd, &pid);
+
+    if (tid > 0) {
+        return .{ tid, pid };
     }
 
     return switch (windows.kernel32.GetLastError()) {

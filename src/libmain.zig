@@ -10,22 +10,14 @@ const fs = std.fs;
 
 var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
 
-const logs_writer: *Io.Writer = &logs_file_writer.interface;
-
-var logs_buffer: [64]u8 = undefined;
-var logs_file_writer: std.fs.File.Writer = .{
-    .interface = std.fs.File.Writer.initInterface(&logs_buffer),
-    .file = undefined,
-    .mode = .streaming,
-};
-
 fn setup() bool {
     const allocator = gpa.allocator();
 
-    var app_dir = openAppDataDir(allocator, "Overlap") catch return false;
-    defer app_dir.close();
+    const wnd = windows.FindWindow("OverlapLauncherClass", null) orelse return false;
+    const tid, _ = windows.GetWindowThreadProcessId(wnd) catch return false;
 
-    logs_file_writer.file = app_dir.createFile("logs.txt", .{ .lock = .exclusive }) catch return false;
+    const WM_HOOKNOTIFY = windows.WM_USER + 2;
+    windows.PostThreadMessage(tid, WM_HOOKNOTIFY, windows.GetCurrentProcessId(), 0) catch return false;
 
     log.info("attaching overlay hooks", .{});
     return hooks.init(allocator);
@@ -35,8 +27,6 @@ fn cleanup() void {
     log.info("detaching overlay hooks", .{});
     renderer.cleanup();
     hooks.deinit();
-
-    logs_file_writer.file.close();
 
     _ = gpa.deinit();
 }
@@ -112,9 +102,10 @@ fn logFn(
     const level_txt = comptime message_level.asText();
     const prefix2 = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
 
-    // todo: lock them files
-    logs_writer.print(level_txt ++ prefix2 ++ format ++ "\n", args) catch return;
-    logs_writer.flush() catch return;
+    _ = level_txt;
+    _ = prefix2;
+    _ = format;
+    _ = args;
 }
 
 pub const std_options: std.Options = .{

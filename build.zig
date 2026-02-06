@@ -2,7 +2,7 @@ const std = @import("std");
 const libdetours = @import("build/libdetours.zig");
 
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
+    const target = b.standardTargetOptions(.{ .default_target = .{ .os_tag = .windows } });
     const optimize = b.standardOptimizeOption(.{});
 
     const fat = b.dependency("fat", .{

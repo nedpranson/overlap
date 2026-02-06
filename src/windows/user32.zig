@@ -94,3 +94,10 @@ pub extern "user32" fn CreateWindowExA(
 ) callconv(.winapi) ?HWND;
 
 pub extern "user32" fn DestroyWindow(hWnd: HWND) callconv(.winapi) BOOL;
+
+pub extern "user32" fn PostThreadMessageA(
+    idThread: DWORD,
+    Msg: UINT,
+    wParam: WPARAM,
+    lParam: LPARAM,
+) callconv(.winapi) BOOL;
