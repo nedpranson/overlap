@@ -16,7 +16,7 @@ fn setup() bool {
     const WM_HOOKNOTIFY = windows.WM_USER + 2;
 
     wnd = windows.FindWindow("OverlapLauncherClass", null) orelse return false;
-    windows.PostMessage(wnd, WM_HOOKNOTIFY, windows.GetCurrentProcessId(), 0) catch return false;
+    windows.SendMessage(wnd, WM_HOOKNOTIFY, windows.GetCurrentProcessId(), 0) catch return false;
 
     log.info("attaching overlay hooks", .{});
     return hooks.init(allocator);
@@ -93,7 +93,6 @@ fn openAppDataDir(alloc: std.mem.Allocator, appname: []const u8) !fs.Dir {
         };
     }
 }
-
 
 fn logFn(
     comptime message_level: std.log.Level,

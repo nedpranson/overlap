@@ -397,6 +397,7 @@ pub const SendMessageError = error{
 pub fn SendMessage(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) SendMessageError!void {
     if (user32.SendMessageA(hWnd, Msg, wParam, lParam) == windows.FALSE) {
         return switch (windows.kernel32.GetLastError()) {
+            .PROC_NOT_FOUND => {}, // hmm
             else => |err| windows.unexpectedError(err),
         };
     }
