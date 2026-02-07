@@ -7,16 +7,20 @@ pub export fn __overlap_hook_proc(code: c_int, wParam: windows.WPARAM, lParam: w
     return windows.user32.CallNextHookEx(null, code, wParam, lParam);
 }
 
-var reset_event: Thread.ResetEvent = .{};
+var exit_ev: Thread.ResetEvent = .{};
+var done_ev: Thread.ResetEvent = .{};
 
-fn entry() void {
+fn entry(_: windows.LPVOID) callconv(.winapi) windows.DWORD {
+    defer done_ev.set();
+
     // setup
     windows.OutputDebugString("hello from entry thread");
 
-    // cleanup
-    reset_event.wait();
+    exit_ev.wait();
 
+    // cleanup
     windows.OutputDebugString("bye from entry thread");
+    return 0;
 }
 
 // DllMain is serialized
@@ -34,10 +38,20 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
         windows.DLL_PROCESS_ATTACH => {
             windows.DisableThreadLibraryCalls(@ptrCast(hinstDLL)) catch {};
 
-            const thread = Thread.spawn(.{}, entry, .{}) catch return windows.FALSE;
-            thread.detach();
+            const thread = windows.CreateThread(
+                null,
+                Thread.SpawnConfig.default_stack_size,
+                &entry,
+                null,
+                0,
+                null,
+            ) catch return windows.FALSE;
+            windows.CloseHandle(thread);
         },
-        windows.DLL_PROCESS_DETACH => reset_event.set(),
+        windows.DLL_PROCESS_DETACH => {
+            exit_ev.set();
+            done_ev.wait();
+        },
         else => {},
     }
 
