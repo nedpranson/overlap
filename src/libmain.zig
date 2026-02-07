@@ -7,20 +7,22 @@ pub export fn __overlap_hook_proc(code: c_int, wParam: windows.WPARAM, lParam: w
     return windows.user32.CallNextHookEx(null, code, wParam, lParam);
 }
 
-var entry_thread: ?windows.HANDLE = null;
-var entry_reset_event: Thread.ResetEvent = .{};
-
-fn entry(_: windows.LPVOID) callconv(.winapi) windows.DWORD {
-    windows.OutputDebugString("hello from entry thread");
+var reset_event: Thread.ResetEvent = .{};
+fn entry(lpParamater: windows.LPVOID) callconv(.winapi) windows.DWORD {
     // setup
-    entry_reset_event.wait();
+    windows.OutputDebugString("hello from entry thread");
+
     // cleanup
+    reset_event.wait();
+    defer windows.FreeLibraryAndExitThread(@ptrCast(lpParamater), 0);
+
     windows.OutputDebugString("bye from entry thread");
-    return 0;
 }
 
 // DllMain is serialized
 pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpvReserved: ?windows.LPVOID) callconv(.winapi) windows.BOOL {
+    _ = lpvReserved;
+
     const pid = windows.GetCurrentProcessId();
     const tid = windows.GetCurrentThreadId();
 
@@ -32,29 +34,17 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
         windows.DLL_PROCESS_ATTACH => {
             windows.DisableThreadLibraryCalls(@ptrCast(hinstDLL)) catch {};
 
-            entry_thread = windows.CreateThread(
+            const thread = windows.CreateThread(
                 null,
                 Thread.SpawnConfig.default_stack_size,
                 &entry,
-                null,
+                hinstDLL,
                 0,
                 null,
             ) catch return windows.FALSE;
+            windows.CloseHandle(thread);
         },
-        windows.DLL_PROCESS_DETACH => {
-            _ = lpvReserved;
-            //if (lpvReserved != null) {
-                //return windows.TRUE;
-            //}
-
-
-            if (entry_thread) |thread| {
-                entry_reset_event.set();
-                windows.WaitForSingleObjectEx(thread, windows.INFINITE, false) catch unreachable;
-                windows.CloseHandle(thread);
-                windows.OutputDebugString("joined, exiting");
-            }
-        },
+        windows.DLL_PROCESS_DETACH => reset_event.set(),
         else => {},
     }
 

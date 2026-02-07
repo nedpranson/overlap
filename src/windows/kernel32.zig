@@ -20,7 +20,7 @@ pub extern "kernel32" fn AllocConsole() callconv(.winapi) BOOL;
 
 pub extern "kernel32" fn FreeConsole() callconv(.winapi) BOOL;
 
-pub extern "kernel32" fn FreeLibraryAndExitThread(hLibModule: HMODULE, dwExitCode: DWORD) callconv(.winapi) void;
+pub extern "kernel32" fn FreeLibraryAndExitThread(hLibModule: HMODULE, dwExitCode: DWORD) callconv(.winapi) noreturn;
 
 pub extern "kernel32" fn GetModuleHandleA(lpModuleName: ?LPCSTR) callconv(.winapi) ?HMODULE;
 

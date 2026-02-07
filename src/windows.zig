@@ -483,7 +483,7 @@ pub fn FreeConsole() FreeConsoleError!void {
     }
 }
 
-pub inline fn FreeLibraryAndExitThread(hLibModule: windows.HMODULE, dwExitCode: u32) void {
+pub inline fn FreeLibraryAndExitThread(hLibModule: windows.HMODULE, dwExitCode: u32) noreturn {
     kernel32.FreeLibraryAndExitThread(hLibModule, dwExitCode);
 }
 
