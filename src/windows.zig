@@ -59,6 +59,9 @@ pub const E_NOINTERFACE = windows.E_NOINTERFACE;
 pub const STD_INPUT_HANDLE = windows.STD_INPUT_HANDLE;
 pub const STD_OUTPUT_HANDLE = windows.STD_OUTPUT_HANDLE;
 pub const STD_ERROR_HANDLE = windows.STD_ERROR_HANDLE;
+pub const SECURITY_ATTRIBUTES = windows.SECURITY_ATTRIBUTES;
+pub const LPTHREAD_START_ROUTINE = windows.LPTHREAD_START_ROUTINE;
+pub const INFINITE = windows.INFINITE;
 
 pub const GetCurrentProcessId = windows.GetCurrentProcessId;
 pub const GetCurrentThreadId = windows.GetCurrentThreadId;
@@ -68,6 +71,9 @@ pub const GetWindow = user32.GetWindow;
 pub const GetAncestor = user32.GetAncestor;
 pub const EnumWindows = user32.EnumWindows;
 pub const GetCurrentThread = windows.GetCurrentThread;
+pub const CloseHandle = windows.CloseHandle;
+pub const WaitForSingleObject = windows.WaitForSingleObject;
+pub const WaitForSingleObjectEx = windows.WaitForSingleObjectEx;
 
 pub const COPYDATASTRUCT = extern struct {
     dwData: ULONG_PTR,
@@ -388,6 +394,27 @@ pub fn PostThreadMessage(idThread: u32, Msg: UINT, wParam: WPARAM, lParam: LPARA
             else => |err| windows.unexpectedError(err),
         };
     }
+}
+
+pub const CreateThreadError = error{
+    OutOfMemory,
+    Unexpected,
+};
+
+pub fn CreateThread(
+    lpThreadAttributes: ?*SECURITY_ATTRIBUTES,
+    dwStackSize: SIZE_T,
+    lpStartAddress: LPTHREAD_START_ROUTINE,
+    lpParameter: ?LPVOID,
+    dwCreationFlags: DWORD,
+    lpThreadId: ?*DWORD,
+) CreateThreadError!windows.HANDLE {
+    return kernel32.CreateThread(lpThreadAttributes, dwStackSize, lpStartAddress, lpParameter, dwCreationFlags, lpThreadId) orelse {
+        return switch (windows.kernel32.GetLastError()) {
+            .OUTOFMEMORY => error.OutOfMemory,
+            else => |err| windows.unexpectedError(err),
+        };
+    };
 }
 
 pub const SendMessageError = error{

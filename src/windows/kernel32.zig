@@ -1,5 +1,6 @@
 const std = @import("std");
 const windows = std.os.windows;
+const kernel32 = windows.kernel32;
 
 const BOOL = windows.BOOL;
 const DWORD = windows.DWORD;
@@ -8,6 +9,8 @@ const LPCSTR = windows.LPCSTR;
 const LPCWSTR = windows.LPCWSTR;
 const HMODULE = windows.HMODULE;
 const FARPROC = windows.FARPROC;
+
+pub const CreateThread = kernel32.CreateThread;
 
 pub extern "kernel32" fn SetStdHandle(nStdHandle: DWORD, hHandle: HANDLE) callconv(.winapi) BOOL;
 
