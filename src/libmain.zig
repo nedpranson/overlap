@@ -8,13 +8,13 @@ pub export fn __overlap_hook_proc(code: c_int, wParam: windows.WPARAM, lParam: w
 }
 
 var reset_event: Thread.ResetEvent = .{};
-fn entry(lpParamater: windows.LPVOID) callconv(.winapi) windows.DWORD {
+
+fn entry() void {
     // setup
     windows.OutputDebugString("hello from entry thread");
 
     // cleanup
     reset_event.wait();
-    defer windows.FreeLibraryAndExitThread(@ptrCast(lpParamater), 0);
 
     windows.OutputDebugString("bye from entry thread");
 }
@@ -34,15 +34,8 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
         windows.DLL_PROCESS_ATTACH => {
             windows.DisableThreadLibraryCalls(@ptrCast(hinstDLL)) catch {};
 
-            const thread = windows.CreateThread(
-                null,
-                Thread.SpawnConfig.default_stack_size,
-                &entry,
-                hinstDLL,
-                0,
-                null,
-            ) catch return windows.FALSE;
-            windows.CloseHandle(thread);
+            const thread = Thread.spawn(.{}, entry, .{}) catch return windows.FALSE;
+            thread.detach();
         },
         windows.DLL_PROCESS_DETACH => reset_event.set(),
         else => {},
