@@ -1,5 +1,7 @@
 const std = @import("std");
 const windows = @import("windows.zig");
+const hooks = @import("hooks.zig");
+const renderer = @import("renderer.zig");
 
 const Thread = std.Thread;
 
@@ -10,30 +12,34 @@ pub export fn __overlap_hook_proc(code: c_int, wParam: windows.WPARAM, lParam: w
 var exit_ev: Thread.ResetEvent = .{};
 var done_ev: Thread.ResetEvent = .{};
 
-fn entry(_: windows.LPVOID) callconv(.winapi) windows.DWORD {
-    defer done_ev.set();
+var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
 
-    // setup
-    windows.OutputDebugString("hello from entry thread");
+fn entry(_: ?windows.LPVOID) callconv(.winapi) windows.DWORD {
+    defer done_ev.set();
+    defer _ = gpa.deinit();
+
+    if (!hooks.init(gpa.allocator())) {
+        return 0;
+    }
+
+    renderer.init(gpa.allocator()) catch {
+        // todo: print err
+        hooks.deinit();
+        return 0;
+    };
 
     exit_ev.wait();
 
-    // cleanup
-    windows.OutputDebugString("bye from entry thread");
+    // we need to ensure that noone can call `renderer.render`
+    // while `renderer.deinit` is called
+    // this `hooks.deinit()` should give that guarantee
+    hooks.deinit();
+    renderer.deinit();
+
     return 0;
 }
 
-// DllMain is serialized
 pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpvReserved: ?windows.LPVOID) callconv(.winapi) windows.BOOL {
-    _ = lpvReserved;
-
-    const pid = windows.GetCurrentProcessId();
-    const tid = windows.GetCurrentThreadId();
-
-    var buf: [512]u8 = undefined;
-    const msg = std.fmt.bufPrintZ(&buf, "pid: {d}, tid: {d}, fdwReason: {d}", .{pid, tid, fdwReason}) catch unreachable;
-    windows.OutputDebugString(msg);
-
     switch (fdwReason) {
         windows.DLL_PROCESS_ATTACH => {
             windows.DisableThreadLibraryCalls(@ptrCast(hinstDLL)) catch {};
@@ -48,7 +54,9 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
             ) catch return windows.FALSE;
             windows.CloseHandle(thread);
         },
-        windows.DLL_PROCESS_DETACH => {
+        // if lpvReserved is not nil on DLL_PROCESS_DETACH
+        // it means termination and we should not do cleanup
+        windows.DLL_PROCESS_DETACH => if (lpvReserved == null) {
             exit_ev.set();
             done_ev.wait();
         },

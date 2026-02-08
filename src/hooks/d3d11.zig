@@ -328,7 +328,7 @@ fn Present(
         &static.draw_indicies,
     );
 
-    renderer.render(hook.allocator, &gui);
+    renderer.render(&gui);
 
     // todo: on any error we need to unhhok ourselfs
     instance.device.render(
