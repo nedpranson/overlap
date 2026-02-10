@@ -16,21 +16,16 @@ const State = enum(u32) {
 };
 
 var state: atomic.Value(State) = .init(.uninitialized);
-var reset_ev: Thread.ResetEvent = .{};
 
-/// Blocks till render is called from another thread.
 pub fn init(gpa: Allocator) !void {
-    reset_ev.wait();
-
     const err = main.setup(gpa);
-
     state.store(if (std.meta.isError(err)) .failure else .initialized, .release);
-
     return err;
 }
 
 pub fn deinit() void {
-    assert(state.load(.acquire) == .initialized);
+    // todo: enable deinit on
+    assert(state.load(.unordered) == .initialized);
     main.cleanup();
 }
 
@@ -39,7 +34,7 @@ pub fn render(gui: *Gui) void {
     while (true) {
         switch (state.load(.acquire)) {
             .uninitialized => if (state.cmpxchgWeak(.uninitialized, .initializing, .release, .monotonic) == null) {
-                reset_ev.set();
+                @import("libmain.zig").wake_ev.set();
             },
             .initializing => atomic.spinLoopHint(),
             .initialized => return main.render(gui),

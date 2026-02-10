@@ -9,10 +9,11 @@ pub export fn __overlap_hook_proc(code: c_int, wParam: windows.WPARAM, lParam: w
     return windows.user32.CallNextHookEx(null, code, wParam, lParam);
 }
 
-var exit_ev: Thread.ResetEvent = .{};
+pub var wake_ev: Thread.ResetEvent = .{};
 var done_ev: Thread.ResetEvent = .{};
 
 var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
+var exit = false;
 
 fn entry(_: ?windows.LPVOID) callconv(.winapi) windows.DWORD {
     defer done_ev.set();
@@ -22,19 +23,26 @@ fn entry(_: ?windows.LPVOID) callconv(.winapi) windows.DWORD {
         return 0;
     }
 
-    renderer.init(gpa.allocator()) catch {
-        // todo: print err
-        hooks.deinit();
-        return 0;
-    };
+    var deinit_renderer = false;
+    while (true) {
+        wake_ev.wait();
+        defer wake_ev.reset();
 
-    exit_ev.wait();
+        if (exit) {
+            break;
+        }
+
+        renderer.init(gpa.allocator()) catch {
+            break;
+        };
+        deinit_renderer = true;
+    }
 
     // we need to ensure that noone can call `renderer.render`
     // while `renderer.deinit` is called
     // this `hooks.deinit()` should give that guarantee
     hooks.deinit();
-    renderer.deinit();
+    if (deinit_renderer) renderer.deinit();
 
     return 0;
 }
@@ -57,7 +65,8 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
         // if lpvReserved is not nil on DLL_PROCESS_DETACH
         // it means termination and we should not do cleanup
         windows.DLL_PROCESS_DETACH => if (lpvReserved == null) {
-            exit_ev.set();
+            exit = true;
+            wake_ev.set();
             done_ev.wait();
         },
         else => {},
