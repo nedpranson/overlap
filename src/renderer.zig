@@ -19,6 +19,7 @@ var state: atomic.Value(State) = .init(.uninitialized);
 
 pub fn init(gpa: Allocator) !void {
     const err = main.setup(gpa);
+    font_renderer = FontRenderer.init(gpa) catch unreachable;
     state.store(if (std.meta.isError(err)) .failure else .initialized, .release);
     return err;
 }
@@ -27,6 +28,7 @@ pub fn deinit() void {
     // todo: enable deinit on
     assert(state.load(.unordered) == .initialized);
     main.cleanup();
+    font_renderer.deinit();
 }
 
 // todo: return bool as now we will do some backend render code of 0 objects
