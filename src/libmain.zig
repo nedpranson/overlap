@@ -13,7 +13,7 @@ pub var wake_ev: Thread.ResetEvent = .{};
 var done_ev: Thread.ResetEvent = .{};
 
 var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
-var exit = false;
+var exit: std.atomic.Value(bool) = .init(false);
 
 fn entry(_: ?windows.LPVOID) callconv(.winapi) windows.DWORD {
     defer done_ev.set();
@@ -28,7 +28,7 @@ fn entry(_: ?windows.LPVOID) callconv(.winapi) windows.DWORD {
         wake_ev.wait();
         defer wake_ev.reset();
 
-        if (exit) {
+        if (exit.load(.monotonic)) {
             break;
         }
 
@@ -65,7 +65,7 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
         // if lpvReserved is not nil on DLL_PROCESS_DETACH
         // it means termination and we should not do cleanup
         windows.DLL_PROCESS_DETACH => if (lpvReserved == null) {
-            exit = true;
+            exit.store(true, .monotonic);
             wake_ev.set();
             done_ev.wait();
         },
