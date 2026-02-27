@@ -10,6 +10,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const onecore = b.dependency("onecore", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const lib_mod = b.createModule(.{
         .root_source_file = b.path("src/libmain.zig"),
         .target = target,
@@ -30,6 +35,7 @@ pub fn build(b: *std.Build) void {
     });
 
     lib.linkLibrary(detours);
+    lib.linkLibrary(onecore.artifact("onecore"));
 
     b.installArtifact(lib);
 

@@ -12,6 +12,10 @@
             .url = "git+https://github.com/microsoft/Detours#9764cebcb1a75940e68fa83d6730ffaf0f669401",
             .hash = "N-V-__8AAAfkMgCNRxHobeqrxL6ubJ61-7pLSJ4AdbnP9CJe",
         },
+        .onecore = .{
+            .url = "git+https://github.com/nedpranson/onecore#80b7dc174552ed6c2b9700eaad98c3bc53ba0e01",
+            .hash = "onecore-0.0.1-W7PYp9EOAQDe84Gs7bSCaQEdrezVWHPAZPdLLwwVJ0Tt",
+        },
     },
     .paths = .{
         "build.zig",
