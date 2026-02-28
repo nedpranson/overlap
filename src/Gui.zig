@@ -95,10 +95,11 @@ var lock: std.Thread.Mutex = .{};
 // as now we're not using kerning or shaping it's all good, later if we will choose todo these stuff
 // we will need to pass in a string to compite its width or some other work around
 pub fn advanceWidth(_: *Gui, codepoint: u21, descriptor: Descriptor) u32 {
+    _ = descriptor;
     lock.lock();
     defer lock.unlock();
 
-    const glyph = @import("renderer.zig").font_renderer.getGlyph(.{ .size = @bitCast(descriptor.size), .codepoint = codepoint }) catch return 0;
+    const glyph = @import("renderer.zig").font_renderer.getGlyph(codepoint) catch return 0;
     return glyph.metrics.advance_x;
 }
 
@@ -117,7 +118,7 @@ pub fn textW(gui: *Gui, pos: [2]f32, msg: []const u16, descriptor: Descriptor) v
         // todo: this is just stoopid that zig cant hash f32 so i need todo it my self ok
         // todo: have a fallback glyph on errors
         // todo: make FontRenderer threadsafe!!!
-        const glyph = @import("renderer.zig").font_renderer.getGlyph(.{ .size = @bitCast(descriptor.size), .codepoint = codepoint }) catch return;
+        const glyph = @import("renderer.zig").font_renderer.getGlyph(codepoint) catch return;
         defer advance += @floatFromInt(glyph.metrics.advance_x);
 
         const top = [2]f32{ pos[x] + @as(f32, @floatFromInt(glyph.metrics.bearing_x)) + advance, pos[y] + @as(f32, @floatFromInt(glyph.metrics.bearing_y)) };
