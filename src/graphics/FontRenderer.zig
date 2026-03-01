@@ -92,13 +92,23 @@ pub fn getGlyph(self: *FontRenderer, codepoint: u21) !Glyph {//, descriptor: Des
     defer self.lock.unlock();
 
     const gop = try self.glyphs.getOrPut(self.allocator, codepoint);
-    if (!gop.found_existing) {
+    if (!gop.found_existing) blk: {
         const index = onecore.oc_get_char_index(self.face, codepoint).?;
         const metrics = onecore.oc_get_glyph_metrics(self.face, index, .{});
 
         const size = try onecore.oc_render_glyph(self.face, index, null);
         if (size.rows == 0 or size.cols == 0) {
             @branchHint(.unlikely);
+
+            gop.value_ptr.* = .{
+                .uv0 = .{ 0.0, 0.0 },
+                .uv1 = .{ 0.0, 0.0 },
+                .width = 0,
+                .height = 0,
+                .metrics = metrics,
+            };
+
+            break :blk;
         }
 
         const rect = try self.atlas.reserve(size.cols, size.rows);
