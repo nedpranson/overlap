@@ -84,10 +84,13 @@ fn logFn(
     const level_txt = comptime message_level.asText();
     const prefix2 = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
 
-    _ = level_txt;
-    _ = format;
-    _ = prefix2;
-    _ = args;
+    var buffer = [_]u8{'\x00'} ** 4096;
+    const msg = std.fmt.bufPrintZ(&buffer, "overlap: " ++ level_txt ++ prefix2 ++ format, args) catch blk: {
+        buffer[buffer.len - 1] = '\x00';
+        break :blk buffer[0 .. buffer.len - 1 :0];
+    };
+
+    windows.OutputDebugString(msg);
 }
 
 pub const std_options: std.Options = .{
