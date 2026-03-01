@@ -100,7 +100,7 @@ pub fn advanceWidth(_: *Gui, codepoint: u21, descriptor: Descriptor) u32 {
     defer lock.unlock();
 
     const glyph = @import("renderer.zig").font_renderer.getGlyph(codepoint) catch return 0;
-    return glyph.metrics.advance_x;
+    return @intCast(glyph.metrics.advance >> 6);
 }
 
 pub fn advanceWidthf(self: *Gui, codepoint: u21, descriptor: Descriptor) f32 {
@@ -119,9 +119,9 @@ pub fn textW(gui: *Gui, pos: [2]f32, msg: []const u16, descriptor: Descriptor) v
         // todo: have a fallback glyph on errors
         // todo: make FontRenderer threadsafe!!!
         const glyph = @import("renderer.zig").font_renderer.getGlyph(codepoint) catch return;
-        defer advance += @floatFromInt(glyph.metrics.advance_x);
+        defer advance += @floatFromInt(glyph.metrics.advance >> 6);
 
-        const top = [2]f32{ pos[x] + @as(f32, @floatFromInt(glyph.metrics.bearing_x)) + advance, pos[y] + @as(f32, @floatFromInt(glyph.metrics.bearing_y)) };
+        const top = [2]f32{ pos[x] + @as(f32, @floatFromInt(glyph.metrics.bearing_x >> 6)) + advance, pos[y] + @as(f32, @floatFromInt(glyph.metrics.bearing_y >> 6)) };
         const bot = [2]f32{ top[x] + @as(f32, @floatFromInt(glyph.width)), top[y] + @as(f32, @floatFromInt(glyph.height)) };
 
         const verticies = [_]shared.DrawVertex{

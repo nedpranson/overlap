@@ -18,15 +18,15 @@ const Thread = std.Thread;
 // glyphs: std.AutoHashMapUnmanaged(Descriptor, Glyph),
 // fonts: std.ArrayListUnmanaged(fat.Face),
 //
-// pub const Glyph = struct {
-//     uv0: [2]f32,
-//     uv1: [2]f32,
-//
-//     width: u32,
-//     height: u32,
-//
-//     metrics: fat.Face.GlyphMetrics,
-// };
+pub const Glyph = struct {
+    uv0: [2]f32,
+    uv1: [2]f32,
+
+    width: u32,
+    height: u32,
+
+    metrics: onecore.oc_glyph_metrics,
+};
 //
 // pub const Descriptor = struct {
 //     codepoint: u21,
@@ -37,7 +37,7 @@ const Thread = std.Thread;
 allocator: Allocator,
 lock: Thread.Mutex,
 
-glyphs: std.AutoHashMapUnmanaged(u21, onecore.oc_glyph_metrics),
+glyphs: std.AutoHashMapUnmanaged(u21, Glyph),
 
 library: onecore.oc_library,
 face: onecore.oc_face,
@@ -87,7 +87,7 @@ pub fn deinit(self: *FontRenderer) void {
 //     self.atlas.deinit();
 }
 
-pub fn getGlyph(self: *FontRenderer, codepoint: u21) !onecore.oc_glyph_metrics {//, descriptor: Descriptor) !Glyph {
+pub fn getGlyph(self: *FontRenderer, codepoint: u21) !Glyph {//, descriptor: Descriptor) !Glyph {
     self.lock.lock();
     defer self.lock.unlock();
 
@@ -103,13 +103,23 @@ pub fn getGlyph(self: *FontRenderer, codepoint: u21) !onecore.oc_glyph_metrics {
 
         const rect = try self.atlas.reserve(size.cols, size.rows);
 
+        // todo: think of some ways directly copying the data with pitches
+        //       enable it in onecore
         const bitmap = try self.allocator.alloc(u8, size.rows * size.cols);
         defer self.allocator.free(bitmap);
 
         _ = try onecore.oc_render_glyph(self.face, index, bitmap);
         self.atlas.fill(rect, bitmap);
 
-        gop.value_ptr.* = metrics;
+        const altas_size: f32 = @floatFromInt(self.atlas.size);
+
+        gop.value_ptr.* = .{
+            .uv0 = .{ @as(f32, @floatFromInt(rect.x)) / altas_size, @as(f32, @floatFromInt(rect.y)) / altas_size },
+            .uv1 = .{ @as(f32, @floatFromInt(rect.x + size.cols)) / altas_size, @as(f32, @floatFromInt(rect.y + size.rows)) / altas_size },
+            .width = size.cols,
+            .height = size.rows,
+            .metrics = metrics,
+        };
     }
 
     return gop.value_ptr.*;
