@@ -6,7 +6,7 @@ const oc_16p16 = i32;
 const oc_26p6 = i32;
 
 const oc_open_params = extern struct {
-    face_index: u32 = 1,
+    face_index: u32 = 0,
     desired_size: oc_26p6 = 12 << 6,
     dpi: c_short = 96,
 };
