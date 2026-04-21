@@ -13,8 +13,8 @@
             .hash = "N-V-__8AAAfkMgCNRxHobeqrxL6ubJ61-7pLSJ4AdbnP9CJe",
         },
         .onecore = .{
-            .url = "git+https://github.com/nedpranson/onecore#80b7dc174552ed6c2b9700eaad98c3bc53ba0e01",
-            .hash = "onecore-0.0.1-W7PYp9EOAQDe84Gs7bSCaQEdrezVWHPAZPdLLwwVJ0Tt",
+            .url = "git+https://github.com/nedpranson/onecore#ae489eceb17c21bfa68bfec24c2177b481d8f6e8",
+            .hash = "N-V-__8AADXjBQFMC1Uetx5qghUnbvWadER5KaRBZL_6JVbV",
         },
     },
     .paths = .{

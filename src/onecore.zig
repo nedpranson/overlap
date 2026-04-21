@@ -8,41 +8,64 @@ const oc_26p6 = i32;
 const oc_open_params = extern struct {
     face_index: u32 = 0,
     desired_size: oc_26p6 = 12 << 6,
-    dpi: c_short = 96,
-};
-
-const oc_error = enum(c_uint) {
-    oc_error_ok = 0,
-    oc_error_invalid_param,
-    oc_error_table_missing,
-    oc_error_out_of_memory,
-    oc_error_failed_to_open,
-    oc_error_insufficient_buffer,
+    dpi: u16 = 72,
 };
 
 const oc_load_flags = packed struct(u32) {
     LOAD_NO_SCALE: bool = false,
-    _pad: u31 = 0,
+    LOAD_NO_HINTING: bool = false,
+    _pad1: u2 = 0,
+    LOAD_NO_FITTING: bool = false,
+    _pad2: u27 = 0,
 };
 
-pub const oc_library = extern struct {
-    internals: *anyopaque,
+const oc_error = enum(c_int) {
+    ok,
+    invalid_param,
+    table_missing,
+    out_of_memory,
+    failed_to_open,
+    insufficient_buffer,
+    invalid_pixel_size,
 };
 
-pub const oc_face = extern struct {
-    internals: *anyopaque,
-    metrics: oc_font_metrics,
+const oc_slant = enum(c_int) {
+    roman,
+    italic,
+    oblique,
+};
+
+pub const oc_library = *opaque{};
+
+pub const oc_collection = extern struct {
+    impl: *anyopaque,
+
+    fonts: [*]*oc_font,
+    nfonts: u32,
+};
+
+pub const oc_font = extern struct {
+    family: [*:0]const u8,
+    slant: oc_slant,
+    weight: u16,
 };
 
 pub const oc_size = extern struct {
+    ppem: u16,
+    slant: oc_slant,
+    scale: oc_16p16,
+};
+
+pub const oc_extent = extern struct {
     rows: u32,
     cols: u32,
 };
 
-const oc_font_metrics = extern struct {
+pub const oc_face = extern struct {
+    impl: *anyopaque,
+
+    size: oc_size,
     upem: u16,
-    ppem: u16,
-    scale: oc_26p6,
     ascent: u16,
     descent: u16,
     leading: i16,
@@ -59,90 +82,101 @@ pub const oc_glyph_metrics = extern struct {
 };
 
 const abi = struct {
-    extern fn oc_init_library(plibrary: *oc_library) oc_error;
+    extern fn oc_init_library(olibrary: **oc_library) callconv(.c) oc_error;
 
-    extern fn oc_free_library(library: oc_library) void;
+    extern fn oc_free_library(library: *oc_library) callconv(.c) void;
 
-    extern fn oc_open_face(
-        library: oc_library,
-        path: [*:0]const u8,
-        pparams: *const oc_open_params,
-        pface: *oc_face,
-    ) callconv(.c) oc_error;
+    extern fn ocf_init_collection(library: *const oc_library, ocollection: *oc_collection) callconv(.c) oc_error;
 
-    extern fn oc_free_face(face: oc_face) callconv(.c) void;
+    extern fn ocf_free_collection(collection: *oc_collection) callconv(.c) void;
 
-    extern fn oc_get_char_index(face: oc_face, charcode: u32) u16;
+    extern fn ocf_load_fonts(collection: *oc_collection) callconv(.c) oc_error;
 
-    extern fn oc_get_glyph_metrics(
-        face: oc_face,
-        glyph_index: u16,
-        flags: oc_load_flags,
-        pmetrics: *oc_glyph_metrics
-    ) callconv(.c) void;
+    extern fn ocf_has_character(font: *const oc_font, character: u32) callconv(.c) bool;
 
-    extern fn oc_render_glyph(
-        face: oc_face,
-        glyph_index: u16,
-        psize: *oc_size,
-        buffer: ?[*]u8,
-        buffer_size: usize,
-    ) callconv(.c) oc_error;
+    extern fn ocf_open_font(font: *const oc_font, desired_size: oc_26p6, dpi: u16, oface: *oc_face) callconv(.c) oc_error;
+
+    extern fn ocl_free_face(face: *oc_face) callconv(.c) void;
+
+    extern fn ocl_get_char_index(face: *const oc_face) callconv(.c) u16;
+
+    extern fn ocl_get_glyph_metrics(face: *const oc_face, index: u16, flags: oc_load_flags, ometrics: *oc_glyph_metrics) callconv(.c) void;
 };
 
-pub const OCInitLibraryError = error{
+pub const InitLibraryError = error{
     OutOfMemory,
     Unexpected,
 };
 
-pub fn oc_init_library() OCInitLibraryError!oc_library {
-    var library: oc_library = undefined;
+pub fn oc_init_library() InitLibraryError!*oc_library {
+    var library: *oc_library = undefined;
     return switch (abi.oc_init_library(&library)) {
-        .oc_error_ok => library,
-        .oc_error_out_of_memory => error.OutOfMemory,
+        .ok => library,
+        .out_of_memory => error.OutOfMemory,
         else => error.Unexpected,
     };
 }
 
 pub const oc_free_library = abi.oc_free_library;
 
-pub const OCOpenFaceError = error{
+pub const InitCollectionError = error{
     OutOfMemory,
     Unexpected,
 };
 
-pub fn oc_open_face(library: oc_library, path: [:0]const u8, params: oc_open_params) OCOpenFaceError!oc_face {
-    var face: oc_face = undefined;
-    return switch (abi.oc_open_face(library, path, &params, &face)) {
-        .oc_error_ok => face,
-        .oc_error_out_of_memory => error.OutOfMemory,
+pub fn ocf_init_collection(library: *const oc_library) InitCollectionError!oc_collection {
+    var collection: oc_collection = undefined;
+    return switch (abi.ocf_init_collection(library, &collection)) {
+        .ok => collection,
+        .out_of_memory => error.OutOfMemory,
         else => error.Unexpected,
     };
 }
 
-pub const oc_free_face = abi.oc_free_face;
+pub const ocf_free_collection = abi.ocf_free_collection;
 
-pub fn oc_get_char_index(face: oc_face, charcode: u21) ?u16 {
-    const idx = abi.oc_get_char_index(face, charcode);
-    return if (idx == 0) null else idx;
+pub const LoadFontsError = error{
+    OutOfMemory,
+    Unexpected,
+};
+
+pub fn ocf_load_fonts(collection: *oc_collection) LoadFontsError!void {
+    return switch (abi.ocf_load_fonts(collection)) {
+        .ok => {},
+        .out_of_memory => error.OutOfMemory,
+        else => error.Unexpected,
+    };
 }
 
-pub fn oc_get_glyph_metrics(face: oc_face, glyph_index: u16, flags: oc_load_flags) oc_glyph_metrics {
+pub inline fn ocf_has_character(font: *const oc_font, character: u21) bool {
+    return abi.ocf_has_character(font, character);
+}
+
+pub const OpenFontError = error{
+    InvalidPixelSize,
+    OutOfMemory,
+    Unexpected,
+};
+
+pub fn ocf_open_font(font: *const oc_font, desired_size: oc_26p6, dpi: u16) OpenFontError!oc_face {
+    var face: *oc_face = undefined;
+    return switch (abi.ocf_open_font(font, desired_size, dpi, &face)) {
+        .ok => face,
+        .invalid_pixel_size => error.InvalidPixelSize,
+        .out_of_memory => error.OutOfMemory,
+        else => error.Unexpected,
+    };
+}
+
+pub const ocl_free_face = abi.ocl_free_face;
+
+pub fn ocl_get_char_index(face: *const oc_face) ?u16 {
+    const index = abi.ocl_get_char_index(face);
+    return if (index > 0) index else null;
+}
+
+pub fn ocl_get_glyph_metrics(face: *const oc_face, index: u16, flags: oc_load_flags) oc_glyph_metrics {
     var metrics: oc_glyph_metrics = undefined;
-    abi.oc_get_glyph_metrics(face, glyph_index, flags, &metrics);
+    abi.ocl_get_glyph_metrics(face, index, flags, &metrics);
     return metrics;
-}
-
-pub const OCRenderGlyphError = error{
-    OutOfMemory,
-    Unexpected,
-};
-
-pub fn oc_render_glyph(face: oc_face, glyph_index: u16, buffer: ?[]u8) OCRenderGlyphError!oc_size {
-    var size: oc_size = undefined;
-    return switch (abi.oc_render_glyph(face, glyph_index, &size, if (buffer) |b| b.ptr else null, if (buffer) |b| b.len else 0)) {
-        .oc_error_ok => size,
-        .oc_error_out_of_memory => error.OutOfMemory,
-        else => error.Unexpected,
-    };
 }
