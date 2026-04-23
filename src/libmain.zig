@@ -52,7 +52,6 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
         windows.DLL_PROCESS_ATTACH => {
             windows.DisableThreadLibraryCalls(@ptrCast(hinstDLL)) catch {};
 
-            std.Thread.spawn()
             const thread = windows.CreateThread(
                 null,
                 Thread.SpawnConfig.default_stack_size,
