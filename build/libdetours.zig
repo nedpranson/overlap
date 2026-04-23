@@ -22,9 +22,9 @@ pub fn buildLibrary(b: *std.Build, options: anytype) *std.Build.Step.Compile {
     // when compiling with msvc is is needed to link with libc not libcpp
     // https://github.com/ziglang/zig/issues/5312
     if (target.result.abi == .msvc) {
-        lib.linkLibC();
+        lib.root_module.link_libc = true;
     } else {
-        lib.linkLibCpp();
+        lib.root_module.link_libcpp = true;
     }
 
     var flags_buf: [5][]const u8 = undefined;
@@ -55,9 +55,9 @@ pub fn buildLibrary(b: *std.Build, options: anytype) *std.Build.Step.Compile {
         },
     }
 
-    lib.addIncludePath(detours.path("src"));
+    lib.root_module.addIncludePath(detours.path("src"));
 
-    lib.addCSourceFiles(.{
+    lib.root_module.addCSourceFiles(.{
         .root = detours.path("src"),
         .files = &.{
             "creatwth.cpp",

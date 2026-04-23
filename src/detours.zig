@@ -65,7 +65,7 @@ pub const AttachError = error{
 };
 
 pub fn Attach(comptime Detour: anytype, ppPointer: **@TypeOf(Detour)) AttachError!void {
-    const win_err: Win32Error = @enumFromInt(DetourAttach(ppPointer, &Detour));
+    const win_err: Win32Error = @enumFromInt(DetourAttach(@ptrCast(ppPointer), &Detour));
     return switch (win_err) {
         .SUCCESS => {},
         .INVALID_BLOCK => error.FunctionTooSmall,
@@ -84,7 +84,7 @@ pub const DetachError = error{
 };
 
 pub fn Detach(comptime Detour: anytype, ppPointer: **@TypeOf(Detour)) DetachError!void {
-    const win_err: Win32Error = @enumFromInt(DetourDetach(ppPointer, &Detour));
+    const win_err: Win32Error = @enumFromInt(DetourDetach(@ptrCast(ppPointer), &Detour));
     return switch (win_err) {
         .SUCCESS => {},
         .INVALID_BLOCK => error.FunctionTooSmall,

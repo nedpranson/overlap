@@ -1,16 +1,26 @@
 const std = @import("std");
-const windows = std.os.windows;
-const kernel32 = windows.kernel32;
+const windows = @import("../windows.zig");
 
 const BOOL = windows.BOOL;
 const DWORD = windows.DWORD;
 const HANDLE = windows.HANDLE;
+const SIZE_T = windows.SIZE_T;
 const LPCSTR = windows.LPCSTR;
+const LPVOID = windows.LPVOID;
 const LPCWSTR = windows.LPCWSTR;
 const HMODULE = windows.HMODULE;
 const FARPROC = windows.FARPROC;
+const SECURITY_ATTRIBUTES = windows.SECURITY_ATTRIBUTES;
+const LPTHREAD_START_ROUTINE = windows.LPTHREAD_START_ROUTINE;
 
-pub const CreateThread = kernel32.CreateThread;
+pub extern "kernel32" fn CreateThread(
+    lpThreadAttributes: ?*SECURITY_ATTRIBUTES,
+    dwStackSize: SIZE_T,
+    lpStartAddress: LPTHREAD_START_ROUTINE,
+    lpParameter: ?LPVOID,
+    dwCreationFlags: DWORD,
+    lpThreadId: ?*DWORD,
+) callconv(.winapi) ?HANDLE;
 
 pub extern "kernel32" fn SetStdHandle(nStdHandle: DWORD, hHandle: HANDLE) callconv(.winapi) BOOL;
 

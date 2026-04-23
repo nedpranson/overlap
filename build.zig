@@ -1,19 +1,10 @@
 const std = @import("std");
 const libdetours = @import("build/libdetours.zig");
+const libonecore = @import("build/libonecore.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{ .default_target = .{ .os_tag = .windows } });
     const optimize = b.standardOptimizeOption(.{});
-
-    const fat = b.dependency("fat", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const onecore = b.dependency("onecore", .{
-        .target = target,
-        .optimize = optimize,
-    });
 
     const lib_mod = b.createModule(.{
         .root_source_file = b.path("src/libmain.zig"),
@@ -27,15 +18,18 @@ pub fn build(b: *std.Build) void {
         .root_module = lib_mod,
     });
 
-    lib.root_module.addImport("fat", fat.module("fat"));
-
     const detours = libdetours.buildLibrary(b, .{
         .target = target,
         .optimize = optimize,
     });
 
-    lib.linkLibrary(detours);
-    lib.linkLibrary(onecore.artifact("onecore"));
+    const onecore = libonecore.buildLibrary(b, .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    lib.root_module.linkLibrary(detours);
+    lib.root_module.linkLibrary(onecore);
 
     b.installArtifact(lib);
 

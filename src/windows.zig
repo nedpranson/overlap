@@ -34,10 +34,10 @@ pub const BOOL = windows.BOOL;
 pub const RECT = windows.RECT;
 pub const BYTE = windows.BYTE;
 pub const FLOAT = windows.FLOAT;
-pub const FALSE = windows.FALSE;
 pub const ULONG = windows.ULONG;
 pub const DWORD = windows.DWORD;
-pub const WPARAM = windows.WPARAM;
+pub const WPARAM = usize;
+pub const FARPROC = windows.FARPROC;
 pub const PCWSTR = windows.PCWSTR;
 pub const LPARAM = windows.LPARAM;
 pub const SIZE_T = windows.SIZE_T;
@@ -46,7 +46,7 @@ pub const LPSTR = windows.LPSTR;
 pub const LPDWORD = *windows.DWORD;
 pub const HANDLE = windows.HANDLE;
 pub const LPCWSTR = windows.LPCWSTR;
-pub const LRESULT = windows.LRESULT;
+pub const LRESULT = windows.LONG_PTR;
 pub const HMODULE = windows.HMODULE;
 pub const HRESULT = windows.HRESULT;
 pub const LPVOID = windows.LPVOID;
@@ -60,7 +60,7 @@ pub const STD_INPUT_HANDLE = windows.STD_INPUT_HANDLE;
 pub const STD_OUTPUT_HANDLE = windows.STD_OUTPUT_HANDLE;
 pub const STD_ERROR_HANDLE = windows.STD_ERROR_HANDLE;
 pub const SECURITY_ATTRIBUTES = windows.SECURITY_ATTRIBUTES;
-pub const LPTHREAD_START_ROUTINE = windows.LPTHREAD_START_ROUTINE;
+pub const LPTHREAD_START_ROUTINE = *const windows.THREAD_START_ROUTINE;
 pub const INFINITE = windows.INFINITE;
 
 pub const GetCurrentProcessId = windows.GetCurrentProcessId;
@@ -256,7 +256,7 @@ pub const SetStdHandleError = error{
 };
 
 pub fn SetStdHandle(nStdHandle: DWORD, hHandle: HANDLE) SetStdHandleError!void {
-    if (kernel32.SetStdHandle(nStdHandle, hHandle) == FALSE) {
+    if (kernel32.SetStdHandle(nStdHandle, hHandle) == .FALSE) {
         return switch (windows.GetLastError()) {
             else => |err| windows.unexpectedError(err),
         };
@@ -301,7 +301,7 @@ pub fn CreateWindowEx(
         return hwnd;
     }
 
-    return switch (windows.kernel32.GetLastError()) {
+    return switch (windows.GetLastError()) {
         else => |err| windows.unexpectedError(err),
     };
 }
@@ -373,8 +373,8 @@ const IUnknownVTable = extern struct {
 pub const DisableThreadLibraryCallsError = error{Unexpected};
 
 pub fn DisableThreadLibraryCalls(hLibModule: windows.HMODULE) DisableThreadLibraryCallsError!void {
-    if (kernel32.DisableThreadLibraryCalls(hLibModule) == windows.FALSE) {
-        switch (windows.kernel32.GetLastError()) {
+    if (kernel32.DisableThreadLibraryCalls(hLibModule) == .FALSE) {
+        switch (windows.GetLastError()) {
             else => |err| return windows.unexpectedError(err),
         }
     }
@@ -387,8 +387,8 @@ pub const PostThreadMessageError = error{
 };
 
 pub fn PostThreadMessage(idThread: u32, Msg: UINT, wParam: WPARAM, lParam: LPARAM) PostThreadMessageError!void {
-    if (user32.PostThreadMessageA(idThread, Msg, wParam, lParam) == windows.FALSE) {
-        return switch (windows.kernel32.GetLastError()) {
+    if (user32.PostThreadMessageA(idThread, Msg, wParam, lParam) == .FALSE) {
+        return switch (windows.GetLastError()) {
             .INVALID_THREAD_ID => error.InvalidThreadId,
             .NOT_ENOUGH_QUOTA => error.MessageLimitReached,
             else => |err| windows.unexpectedError(err),
@@ -410,7 +410,7 @@ pub fn CreateThread(
     lpThreadId: ?*DWORD,
 ) CreateThreadError!windows.HANDLE {
     return kernel32.CreateThread(lpThreadAttributes, dwStackSize, lpStartAddress, lpParameter, dwCreationFlags, lpThreadId) orelse {
-        return switch (windows.kernel32.GetLastError()) {
+        return switch (windows.GetLastError()) {
             .OUTOFMEMORY => error.OutOfMemory,
             else => |err| windows.unexpectedError(err),
         };
@@ -422,8 +422,8 @@ pub const SendMessageError = error{
 };
 
 pub fn SendMessage(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) SendMessageError!void {
-    if (user32.SendMessageA(hWnd, Msg, wParam, lParam) == windows.FALSE) {
-        return switch (windows.kernel32.GetLastError()) {
+    if (user32.SendMessageA(hWnd, Msg, wParam, lParam) == .FALSE) {
+        return switch (windows.GetLastError()) {
             .PROC_NOT_FOUND => {}, // hmm
             else => |err| windows.unexpectedError(err),
         };
@@ -435,8 +435,8 @@ pub const PostMessageError = error{
 };
 
 pub fn PostMessage(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) PostMessageError!void {
-    if (user32.PostMessageA(hWnd, Msg, wParam, lParam) == windows.FALSE) {
-        return switch (windows.kernel32.GetLastError()) {
+    if (user32.PostMessageA(hWnd, Msg, wParam, lParam) == .FALSE) {
+        return switch (windows.GetLastError()) {
             else => |err| windows.unexpectedError(err),
         };
     }
@@ -454,7 +454,7 @@ pub fn GetWindowThreadProcessId(hWnd: HWND) GetWindowThreadProcessIdError!struct
         return .{ tid, pid };
     }
 
-    return switch (windows.kernel32.GetLastError()) {
+    return switch (windows.GetLastError()) {
         else => |err| return windows.unexpectedError(err),
     };
 }
@@ -465,8 +465,8 @@ pub const AllocConsoleError = error{
 };
 
 pub fn AllocConsole() AllocConsoleError!void {
-    if (kernel32.AllocConsole() == windows.FALSE) {
-        switch (windows.kernel32.GetLastError()) {
+    if (kernel32.AllocConsole() == .FALSE) {
+        switch (windows.GetLastError()) {
             .ACCESS_DENIED => return error.AccessDenied,
             else => |err| return windows.unexpectedError(err),
         }
@@ -476,8 +476,8 @@ pub fn AllocConsole() AllocConsoleError!void {
 pub const FreeConsoleError = error{Unexpected};
 
 pub fn FreeConsole() FreeConsoleError!void {
-    if (kernel32.FreeConsole() == windows.FALSE) {
-        switch (windows.kernel32.GetLastError()) {
+    if (kernel32.FreeConsole() == .FALSE) {
+        switch (windows.GetLastError()) {
             else => |err| return windows.unexpectedError(err),
         }
     }
@@ -496,8 +496,8 @@ pub const GetModuleInformationError = error{Unexpected};
 
 pub fn GetModuleInformation(hProcess: windows.HANDLE, hModule: windows.HMODULE) GetModuleInformationError!windows.MODULEINFO {
     var module_info: windows.MODULEINFO = undefined;
-    if (psapi.GetModuleInformation(hProcess, hModule, &module_info, @sizeOf(windows.MODULEINFO)) == windows.FALSE) {
-        switch (windows.kernel32.GetLastError()) {
+    if (psapi.GetModuleInformation(hProcess, hModule, &module_info, @sizeOf(windows.MODULEINFO)) == .FALSE) {
+        switch (windows.GetLastError()) {
             else => |err| return windows.unexpectedError(err),
         }
     }
@@ -511,7 +511,7 @@ pub const GetProcAddressError = error{
 
 pub fn GetProcAddress(hModule: windows.HMODULE, lpProcName: [:0]const u8) GetProcAddressError!windows.FARPROC {
     return kernel32.GetProcAddress(hModule, lpProcName) orelse {
-        switch (windows.kernel32.GetLastError()) {
+        switch (windows.GetLastError()) {
             .PROC_NOT_FOUND => return error.ProcedureNotFound,
             else => |err| return windows.unexpectedError(err),
         }
@@ -541,8 +541,8 @@ pub const GetWindowRectError = error{Unexpected};
 
 pub fn GetWindowRect(hWnd: windows.HWND) GetWindowRectError!windows.RECT {
     var rect: windows.RECT = undefined;
-    if (user32.GetWindowRect(hWnd, &rect) == windows.FALSE) {
-        return switch (windows.kernel32.GetLastError()) {
+    if (user32.GetWindowRect(hWnd, &rect) == .FALSE) {
+        return switch (windows.GetLastError()) {
             else => |err| windows.unexpectedError(err),
         };
     }
@@ -567,7 +567,7 @@ pub fn WinHttpOpen(
         return session;
     }
 
-    return switch (windows.kernel32.GetLastError()) {
+    return switch (windows.GetLastError()) {
         else => |err| windows.unexpectedError(err),
     };
 }
@@ -626,7 +626,7 @@ pub fn WinHttpOpenRequest(
         return request;
     }
 
-    return switch (windows.kernel32.GetLastError()) {
+    return switch (windows.GetLastError()) {
         else => |err| windows.unexpectedError(err),
     };
 }
@@ -646,8 +646,8 @@ pub fn WinHttpSendRequest(
     const lpOptional = if (Optional) |slice| slice.ptr else null;
     const dwOptionalLength: DWORD = if (Optional) |slice| @intCast(slice.len) else 0;
 
-    if (winhttp.WinHttpSendRequest(hRequest, lpszHeaders, dwHeadersLength, lpOptional, dwOptionalLength, dwTotalLength, dwContext) == FALSE) {
-        return switch (windows.kernel32.GetLastError()) {
+    if (winhttp.WinHttpSendRequest(hRequest, lpszHeaders, dwHeadersLength, lpOptional, dwOptionalLength, dwTotalLength, dwContext) == .FALSE) {
+        return switch (windows.GetLastError()) {
             @as(Win32Error, @enumFromInt(12007)) => error.NetworkUnreachable,
             else => |err| windows.unexpectedError(err),
         };
@@ -657,7 +657,7 @@ pub fn WinHttpSendRequest(
 pub const WinHttpReceiveResponseError = error{Unexpected};
 
 pub fn WinHttpReceiveResponse(hRequest: HINTERNET) WinHttpOpenRequestError!void {
-    if (winhttp.WinHttpReceiveResponse(hRequest, null) == FALSE) {
+    if (winhttp.WinHttpReceiveResponse(hRequest, null) == .FALSE) {
         return switch (windows.kernel32.GetLastError()) {
             else => |err| windows.unexpectedError(err),
         };
@@ -676,8 +676,8 @@ pub fn WinHttpQueryHeaders(
 ) WinHttpQueryHeadersError!void {
     const pwszName = if (Name) |slice| slice.ptr else null;
 
-    if (winhttp.WinHttpQueryHeaders(hRequest, dwInfoLevel, pwszName, lpBuffer, lpdwBufferLength, lpdwIndex) == FALSE) {
-        return switch (windows.kernel32.GetLastError()) {
+    if (winhttp.WinHttpQueryHeaders(hRequest, dwInfoLevel, pwszName, lpBuffer, lpdwBufferLength, lpdwIndex) == .FALSE) {
+        return switch (windows.GetLastError()) {
             .INSUFFICIENT_BUFFER => error.NoSpaceLeft,
             @as(Win32Error, @enumFromInt(12150)) => error.HeaderNotFound,
             else => |err| windows.unexpectedError(err),
@@ -690,8 +690,8 @@ pub const WinHttpReadDataError = error{Unexpected};
 pub fn WinHttpReadData(hRequest: HINTERNET, Buffer: []u8) WinHttpReadDataError!u32 {
     var lpdwNumberOfBytesRead: DWORD = 0;
 
-    if (winhttp.WinHttpReadData(hRequest, Buffer.ptr, @truncate(Buffer.len), &lpdwNumberOfBytesRead) == FALSE) {
-        return switch (windows.kernel32.GetLastError()) {
+    if (winhttp.WinHttpReadData(hRequest, Buffer.ptr, @truncate(Buffer.len), &lpdwNumberOfBytesRead) == .FALSE) {
+        return switch (windows.GetLastError()) {
             else => |err| windows.unexpectedError(err),
         };
     }
@@ -704,8 +704,8 @@ pub const WinHttpWriteDataError = error{Unexpected};
 pub fn WinHttpWriteData(hRequest: HINTERNET, Buffer: []const u8) WinHttpWriteDataError!u32 {
     var lpdwNumberOfBytesWritten: DWORD = 0;
 
-    if (winhttp.WinHttpWriteData(hRequest, Buffer.ptr, @truncate(Buffer.len), &lpdwNumberOfBytesWritten) == FALSE) {
-        return switch (windows.kernel32.GetLastError()) {
+    if (winhttp.WinHttpWriteData(hRequest, Buffer.ptr, @truncate(Buffer.len), &lpdwNumberOfBytesWritten) == .FALSE) {
+        return switch (windows.GetLastError()) {
             else => |err| windows.unexpectedError(err),
         };
     }
@@ -720,8 +720,8 @@ pub fn WinHttpAddRequestHeaders(
     Headers: []const u16,
     dwModifiers: DWORD,
 ) WinHttpAddRequestHeadersError!void {
-    if (winhttp.WinHttpAddRequestHeaders(hRequest, Headers.ptr, @intCast(Headers.len), dwModifiers) == FALSE) {
-        return switch (windows.kernel32.GetLastError()) {
+    if (winhttp.WinHttpAddRequestHeaders(hRequest, Headers.ptr, @intCast(Headers.len), dwModifiers) == .FALSE) {
+        return switch (windows.GetLastError()) {
             else => |err| windows.unexpectedError(err),
         };
     }
@@ -740,7 +740,7 @@ pub fn SetWindowLongPtr(
     // on 32 bit call 32 bit one!
     const res = user32.SetWindowLongPtrA(hWnd, nIndex, dwNewLong);
     if (res == 0) {
-        return switch (windows.kernel32.GetLastError()) {
+        return switch (windows.GetLastError()) {
             .ACCESS_DENIED => error.AccessDenied,
             else => |err| windows.unexpectedError(err),
         };
@@ -752,8 +752,8 @@ pub fn SetWindowLongPtr(
 pub const SetConsoleTitleError = error{Unexpected};
 
 pub fn SetConsoleTitle(ConsoleTitle: [:0]const u8) SetConsoleTitleError!void {
-    if (kernel32.SetConsoleTitleA(ConsoleTitle.ptr) == FALSE) {
-        return switch (windows.kernel32.GetLastError()) {
+    if (kernel32.SetConsoleTitleA(ConsoleTitle.ptr) == .FALSE) {
+        return switch (windows.GetLastError()) {
             else => |err| windows.unexpectedError(err),
         };
     }

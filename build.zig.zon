@@ -4,10 +4,6 @@
     .fingerprint = 0xc023841afe5520a8,
     .minimum_zig_version = "0.15.1",
     .dependencies = .{
-        .fat = .{
-            .url = "git+https://github.com/nedaras/fat#2f4382f187c05328b2f51c64eadd80cf60059bec",
-            .hash = "fat-0.0.0-utxKUY1GAQCcIJP2en1a2lSNleltIY4jel3lk79WzRCT",
-        },
         .detours = .{
             .url = "git+https://github.com/microsoft/Detours#9764cebcb1a75940e68fa83d6730ffaf0f669401",
             .hash = "N-V-__8AAAfkMgCNRxHobeqrxL6ubJ61-7pLSJ4AdbnP9CJe",
