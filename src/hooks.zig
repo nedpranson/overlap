@@ -7,11 +7,12 @@ const Image = @import("graphics/Image.zig");
 const mem = std.mem;
 const unicode = std.unicode;
 const log = std.log.scoped(.hooks);
-const Mutex = std.Thread.Mutex;
+const Io = std.Io;
+const Threaded = Io.Threaded;
 const Allocator = mem.Allocator;
 const assert = std.debug.assert;
 
-var hook_mu: Mutex.Recursive = .init;
+var hook_mu: Io.Mutex = .init;
 var allocator: Allocator = undefined;
 
 var load_library_a: *@TypeOf(LoadLibraryA) = undefined;
@@ -98,8 +99,8 @@ pub fn init(gpa: Allocator) bool {
         log.err("LoadLibraryW: cannot detach: {}", .{err});
     };
 
-    hook_mu.lock();
-    defer hook_mu.unlock();
+    Threaded.mutexLock(&hook_mu);
+    defer Threaded.mutexUnlock(&hook_mu);
 
     for (hooks) |hook| {
         const mod = windows.GetModuleHandle(hook.module_a) orelse continue;
@@ -132,8 +133,8 @@ pub fn deinit() void {
         log.err("LoadLibraryW: cannot detach: {}", .{err});
     }
 
-    hook_mu.lock();
-    defer hook_mu.unlock();
+    Threaded.mutexLock(&hook_mu);
+    defer Threaded.mutexUnlock(&hook_mu);
 
     for (hooks) |hook| {
         if (!hook.active()) continue;
@@ -148,8 +149,8 @@ pub fn broadcastUnloadImage(img: *Image) void {
     // todo: fix this race condition `hooked` is unsafe!
     if (!hooked) return;
 
-    hook_mu.lock();
-    defer hook_mu.unlock();
+    Threaded.mutexLock(&hook_mu);
+    defer Threaded.mutexUnlock(&hook_mu);
 
     for (hooks) |hook| {
         if (hook.active()) {
@@ -162,8 +163,8 @@ fn LoadLibraryA(lpLibFileName: windows.LPCSTR) callconv(.winapi) ?windows.HMODUL
     const lib = load_library_a(lpLibFileName) orelse return null;
     const lib_name = mem.span(lpLibFileName);
 
-    hook_mu.lock();
-    defer hook_mu.unlock();
+    Threaded.mutexLock(&hook_mu);
+    defer Threaded.mutexUnlock(&hook_mu);
 
     for (hooks) |hook| {
         if (hook.active()) continue;
@@ -181,8 +182,8 @@ fn LoadLibraryW(lpLibFileName: windows.LPCWSTR) callconv(.winapi) ?windows.HMODU
     const lib = load_library_w(lpLibFileName) orelse return null;
     const lib_name = mem.span(lpLibFileName);
 
-    hook_mu.lock();
-    defer hook_mu.unlock();
+    Threaded.mutexLock(&hook_mu);
+    defer Threaded.mutexUnlock(&hook_mu);
 
     for (hooks) |hook| {
         if (hook.active()) continue;
