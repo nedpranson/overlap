@@ -20,6 +20,7 @@ pub const dxgi = @import("windows/dxgi.zig");
 pub const d3d11 = @import("windows/d3d11.zig");
 pub const d3dcommon = @import("windows/d3dcommon.zig");
 pub const d3dcompiler = @import("windows/d3dcompiler.zig");
+pub const ntdll = windows.ntdll;
 
 pub const Win32Error = windows.Win32Error;
 pub const INT = windows.INT;
@@ -60,8 +61,9 @@ pub const STD_INPUT_HANDLE = windows.STD_INPUT_HANDLE;
 pub const STD_OUTPUT_HANDLE = windows.STD_OUTPUT_HANDLE;
 pub const STD_ERROR_HANDLE = windows.STD_ERROR_HANDLE;
 pub const SECURITY_ATTRIBUTES = windows.SECURITY_ATTRIBUTES;
+pub const LPSECURITY_ATTRIBUTES = *windows.SECURITY_ATTRIBUTES;
 pub const LPTHREAD_START_ROUTINE = *const windows.THREAD_START_ROUTINE;
-pub const INFINITE = windows.INFINITE;
+pub const INFINITE = 4294967295;
 
 pub const GetCurrentProcessId = windows.GetCurrentProcessId;
 pub const GetCurrentThreadId = windows.GetCurrentThreadId;
@@ -72,8 +74,8 @@ pub const GetAncestor = user32.GetAncestor;
 pub const EnumWindows = user32.EnumWindows;
 pub const GetCurrentThread = windows.GetCurrentThread;
 pub const CloseHandle = windows.CloseHandle;
-pub const WaitForSingleObject = windows.WaitForSingleObject;
-pub const WaitForSingleObjectEx = windows.WaitForSingleObjectEx;
+pub const GetCurrentProcess = windows.GetCurrentProcess;
+pub const GetLastError = windows.GetLastError;
 
 pub const COPYDATASTRUCT = extern struct {
     dwData: ULONG_PTR,
@@ -250,6 +252,34 @@ pub const WINHTTP_DEFAULT_ACCEPT_TYPES = &[_:null]?LPCWSTR{
 pub const WINHTTP_QUERY_CONTENT_LENGTH = 5;
 pub const WINHTTP_QUERY_STATUS_CODE = 19;
 pub const WINHTTP_QUERY_FLAG_NUMBER = 0x20000000;
+
+pub const WAIT_ABANDONED = 0x00000080;
+pub const WAIT_ABANDONED_0 = WAIT_ABANDONED + 0;
+pub const WAIT_OBJECT_0 = 0x00000000;
+pub const WAIT_TIMEOUT = 0x00000102;
+pub const WAIT_FAILED = 0xFFFFFFFF;
+
+pub const WaitForSingleObjectError = error{
+    WaitAbandoned,
+    WaitTimeOut,
+    Unexpected,
+};
+
+pub fn WaitForSingleObject(handle: HANDLE, milliseconds: DWORD) WaitForSingleObjectError!void {
+    return WaitForSingleObjectEx(handle, milliseconds, false);
+}
+
+pub fn WaitForSingleObjectEx(handle: HANDLE, milliseconds: DWORD, alertable: bool) WaitForSingleObjectError!void {
+    switch (kernel32.WaitForSingleObjectEx(handle, milliseconds, @intFromBool(alertable))) {
+        WAIT_ABANDONED => return error.WaitAbandoned,
+        WAIT_OBJECT_0 => return,
+        WAIT_TIMEOUT => return error.WaitTimeOut,
+        WAIT_FAILED => switch (GetLastError()) {
+            else => |err| return unexpectedError(err),
+        },
+        else => return error.Unexpected,
+    }
+}
 
 pub const SetStdHandleError = error{
     Unexpected,

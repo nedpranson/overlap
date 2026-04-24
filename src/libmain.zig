@@ -1,5 +1,5 @@
-// const std = @import("std");
-// const windows = @import("windows.zig");
+const std = @import("std");
+const windows = @import("windows.zig");
 // const hooks = @import("hooks.zig");
 // const renderer = @import("renderer.zig");
 //
@@ -101,24 +101,21 @@
 //     .logFn = logFn,
 // };
 
-const std = @import("std");
-const windows = @import("windows.zig");
+var wake_ev: windows.HANDLE = undefined;
+var done_ev: windows.HANDLE = undefined;
 
-var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-var threaded: std.Io.Threaded = undefined;
+fn entry(_: windows.LPVOID) callconv(.winapi) windows.DWORD {
+    defer _ = windows.kernel32.SetEvent(done_ev);
 
-var event: std.Io.Event = .unset;
-
-fn entry(io: std.Io, gpa: std.mem.Allocator) void {
-    _ = gpa;
-
-    windows.OutputDebugString("Hello from zig 0.16");
-    event.wait(io) catch unreachable;
+    windows.OutputDebugString("Hi from zig 0.16");
+    _ = windows.kernel32.WaitForSingleObjectEx(wake_ev, windows.INFINITE, .FALSE);
     windows.OutputDebugString("Bye from zig 0.16");
+
+    return 0;
 }
 
 pub export fn __overlap_hook_proc(code: c_int, wParam: windows.WPARAM, lParam: windows.LPARAM) callconv(.winapi) windows.LRESULT {
-    return windows.user32.CallNextHookEx(null, code, wParam, lParam);
+     return windows.user32.CallNextHookEx(null, code, wParam, lParam);
 }
 
 pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpvReserved: ?windows.LPVOID) callconv(.winapi) windows.BOOL {
@@ -126,23 +123,26 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
         windows.DLL_PROCESS_ATTACH => {
             windows.DisableThreadLibraryCalls(@ptrCast(hinstDLL)) catch {};
 
-            const gpa = debug_allocator.allocator();
-            threaded = .init(gpa, .{});
+            wake_ev = windows.kernel32.CreateEventA(null, .TRUE, .FALSE, null);
+            done_ev = windows.kernel32.CreateEventA(null, .TRUE, .FALSE, null);
 
-            const io = threaded.io();
-
-            _ = io.concurrent(entry, .{ io, gpa }) catch {
-                threaded.deinit();
-                _ = debug_allocator.deinit();
-
-                return .FALSE;
-            };
+            const thread = windows.kernel32.CreateThread(
+                null,
+                std.Thread.SpawnConfig.default_stack_size,
+                &entry,
+                null,
+                0,
+                null,
+            ) orelse return .FALSE;
+            windows.CloseHandle(thread);
         },
         windows.DLL_PROCESS_DETACH => if (lpvReserved == null) {
-            event.set(threaded.io());
+            _ = windows.kernel32.SetEvent(wake_ev);
+            _ = windows.kernel32.WaitForSingleObjectEx(done_ev, windows.INFINITE, .FALSE);
 
-            threaded.deinit();
-            _ = debug_allocator.deinit();
+            windows.CloseHandle(done_ev);
+            windows.CloseHandle(wake_ev);
+            windows.OutputDebugString("Out from zig 0.16");
         },
         else => {},
     }

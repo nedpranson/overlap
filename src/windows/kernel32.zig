@@ -11,16 +11,39 @@ const LPCWSTR = windows.LPCWSTR;
 const HMODULE = windows.HMODULE;
 const FARPROC = windows.FARPROC;
 const SECURITY_ATTRIBUTES = windows.SECURITY_ATTRIBUTES;
+const LPSECURITY_ATTRIBUTES = windows.LPSECURITY_ATTRIBUTES;
 const LPTHREAD_START_ROUTINE = windows.LPTHREAD_START_ROUTINE;
 
 pub extern "kernel32" fn CreateThread(
-    lpThreadAttributes: ?*SECURITY_ATTRIBUTES,
+    lpThreadAttributes: ?LPSECURITY_ATTRIBUTES,
     dwStackSize: SIZE_T,
     lpStartAddress: LPTHREAD_START_ROUTINE,
     lpParameter: ?LPVOID,
     dwCreationFlags: DWORD,
     lpThreadId: ?*DWORD,
 ) callconv(.winapi) ?HANDLE;
+
+pub extern "kernel32" fn WaitForSingleObjectEx(
+    hHandle: HANDLE,
+    dwMilliseconds: DWORD,
+    bAlertable: BOOL,
+) callconv(.winapi) DWORD;
+
+pub extern "kernel32" fn WaitForMultipleObjects(
+    nCount: DWORD,
+    lpHandle: [*]const HANDLE,
+    bWaitAll: BOOL,
+    dwMilliseconds: DWORD,
+) callconv(.winapi) DWORD;
+
+pub extern "kernel32" fn CreateEventA(
+    lpEventAttributes: ?LPSECURITY_ATTRIBUTES,
+    bManualReset: BOOL,
+    bInitialState: BOOL,
+    lpName: ?LPCSTR,
+) callconv(.winapi) HANDLE;
+
+pub extern "kernel32" fn SetEvent(hEvent: HANDLE) callconv(.winapi) BOOL;
 
 pub extern "kernel32" fn SetStdHandle(nStdHandle: DWORD, hHandle: HANDLE) callconv(.winapi) BOOL;
 
