@@ -8,6 +8,9 @@ var done_ev: windows.HANDLE = undefined;
 fn libmain(io: std.Io, gpa: std.mem.Allocator) !void {
     _ = gpa;
 
+    try windows.RoInitialize(.MULTITHREADED);
+    defer windows.RoUninitialize();
+
     const manager = try windows.GlobalSystemMediaTransportControlsSessionManager.Request(io);
     defer manager.Release();
 

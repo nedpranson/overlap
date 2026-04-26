@@ -143,9 +143,10 @@ pub const BitmapInterpolationMode = graphics.BitmapInterpolationMode;
 pub const GW_OWNER = 4;
 pub const GA_ROOT = 2;
 
-pub const RO_INIT_TYPE = INT;
-pub const RO_INIT_SINGLETHREADED = 0;
-pub const RO_INIT_MULTITHREADED = 1;
+pub const RO_INIT_TYPE = enum(INT) {
+    SINGLETHREADED = 0,
+    MULTITHREADED = 1,
+};
 
 pub const UINT32 = u32;
 pub const HSTRING = *opaque {};
@@ -809,8 +810,8 @@ pub const RoInitializeError = error{Unexpected};
 pub fn RoInitialize(initType: RO_INIT_TYPE) RoInitializeError!void {
     const hr = combase.RoInitialize(initType);
     return switch (hr) {
-        windows.S_OK => {},
-        else => windows.unexpectedError(windows.HRESULT_CODE(hr)),
+        S_OK => {},
+        else => windows.unexpectedError(HRESULT_CODE(hr)),
     };
 }
 
@@ -818,7 +819,10 @@ pub inline fn RoUninitialize() void {
     combase.RoUninitialize();
 }
 
-pub const RoGetActivationFactoryError = error{Unexpected};
+pub const RoGetActivationFactoryError = error{
+    RoNotInitialized,
+    Unexpected,
+};
 
 pub fn RoGetActivationFactory(
     activatableClassId: HSTRING,
@@ -828,6 +832,7 @@ pub fn RoGetActivationFactory(
     const hr = combase.RoGetActivationFactory(activatableClassId, iid, factory);
     return switch (hr) {
         S_OK => {},
+        -2147221008 => error.RoNotInitialized,
         else => windows.unexpectedError(HRESULT_CODE(hr)),
     };
 }
