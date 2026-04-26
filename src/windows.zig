@@ -1096,7 +1096,7 @@ pub fn AsyncOperation(comptime TResult: type) type {
                 return h.ref_count.fetchSub(1, .monotonic) - 1;
             }
 
-            fn Invoke(ctx: *anyopaque, _ : *IAsyncInfo, _: AsyncStatus) callconv(.winapi) HRESULT {
+            fn Invoke(ctx: *anyopaque, _: *IAsyncInfo, _: AsyncStatus) callconv(.winapi) HRESULT {
                 const h: *@This() = @ptrCast(@alignCast(ctx));
 
                 h.event.set(h.io);
@@ -1246,12 +1246,14 @@ pub const GlobalSystemMediaTransportControlsSessionManager = struct {
         const class = try WindowsCreateStringReference(unicode.wtf8ToWtf16LeStringLiteral(NAME), &header);
 
         const Operation = AsyncOperation(*IGlobalSystemMediaTransportControlsSessionManager);
-        var handler: Operation.WaitHandler = .{ 
+        var handler: Operation.WaitHandler = .{
             .io = io,
             .event = .unset,
             .ref_count = .init(1),
         };
-        defer assert(handler.vtable.Release(&handler) == 0);
+        // Wait until WinRT no longer references this
+        defer while (handler.ref_count.load(.monotonic) != 1)
+            std.atomic.spinLoopHint();
 
         var static_manager: *IGlobalSystemMediaTransportControlsSessionManagerStatics = undefined;
         try RoGetActivationFactory(
@@ -1307,9 +1309,9 @@ pub const GlobalSystemMediaTransportControlsSessionManager = struct {
 
             fn wrappedInvokeFn(ctx: @This(), sender: *IGlobalSystemMediaTransportControlsSessionManager, _: *ICurrentSessionChangedEventArgs) void {
                 invokeFn(ctx.original, .{ .handle = sender }) catch |err| {
-                    std.debug.print("error: {s}\n", .{@errorName(err)});
+                    std.log.err("{t}", .{err});
                     if (@errorReturnTrace()) |trace| {
-                        std.debug.dumpStackTrace(trace.*);
+                        std.debug.dumpErrorReturnTrace(trace);
                     }
                 };
             }

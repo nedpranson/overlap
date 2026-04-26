@@ -35,7 +35,7 @@ const oc_slant = enum(c_int) {
     oblique,
 };
 
-pub const oc_library = *opaque{};
+pub const oc_library = *opaque {};
 
 pub const oc_collection = extern struct {
     impl: *anyopaque,

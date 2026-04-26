@@ -6,20 +6,18 @@ var wake_ev: windows.HANDLE = undefined;
 var done_ev: windows.HANDLE = undefined;
 
 fn libmain(io: std.Io, gpa: std.mem.Allocator) !void {
-    _ = gpa;
-
     try windows.RoInitialize(.MULTITHREADED);
     defer windows.RoUninitialize();
 
     const manager = try windows.GlobalSystemMediaTransportControlsSessionManager.Request(io);
     defer manager.Release();
 
-    if (try manager.GetCurrentSession()) |session| {
-        defer session.Release();
-        windows.OutputDebugString("active session found!");
-    } else {
-        windows.OutputDebugString("no active session found!");
-    }
+    const token = try manager.CurrentSessionChanged(gpa, {}, struct {
+        fn invokeFn(_: void, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
+            windows.OutputDebugString("session changed!");
+        }
+    }.invokeFn);
+    defer manager.RemoveCurrentSessionChanged(token) catch unreachable;
 
     assert(windows.kernel32.WaitForSingleObjectEx(wake_ev, windows.INFINITE, .FALSE) == windows.WAIT_OBJECT_0);
 }
@@ -44,7 +42,7 @@ fn entry(_: windows.LPVOID) callconv(.winapi) windows.DWORD {
 }
 
 pub export fn __overlap_hook_proc(code: c_int, wParam: windows.WPARAM, lParam: windows.LPARAM) callconv(.winapi) windows.LRESULT {
-     return windows.user32.CallNextHookEx(null, code, wParam, lParam);
+    return windows.user32.CallNextHookEx(null, code, wParam, lParam);
 }
 
 pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpvReserved: ?windows.LPVOID) callconv(.winapi) windows.BOOL {

@@ -17,7 +17,7 @@ const Thread = std.Thread;
 //
 
 pub const Glyph = struct {
-    uv: struct{ [2]f32, [2]f32 },
+    uv: struct { [2]f32, [2]f32 },
     extent: onecore.oc_extent,
     metrics: onecore.oc_glyph_metrics,
 };
@@ -62,9 +62,9 @@ pub fn init(allocator: Allocator) !FontRenderer {
 }
 
 pub fn deinit(self: *FontRenderer) void {
-     for (self.fonts.items) |*font| {
+    for (self.fonts.items) |*font| {
         onecore.ocl_free_face(font);
-     }
+    }
 
     onecore.ocf_free_collection(&self.collection);
     onecore.oc_free_library(self.library);
@@ -84,7 +84,7 @@ pub fn getGlyph(self: *FontRenderer, desc: Descriptor) !Glyph {
         const index = onecore.ocl_get_char_index(face, desc.codepoint).?;
 
         var glyph: Glyph = .{
-            .uv = .{ 
+            .uv = .{
                 .{ 0.0, 0.0 },
                 .{ 0.0, 0.0 },
             },
