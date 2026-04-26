@@ -1046,88 +1046,77 @@ pub fn AsyncOperation(comptime TResult: type) type {
         }
 
         // tood: use fieldParentPtrs as not extern struct is not safe
-        pub fn get2(self: Self, io: Io) !TResult {
-            const Handler = struct {
-                comptime {
-                    assert(@offsetOf(@This(), "vtable") == 0);
-                }
+        const WaitHandler = struct {
+            comptime {
+                assert(@offsetOf(@This(), "vtable") == 0);
+            }
 
-                vtable: *const IAsyncOperationCompletedHandlerVTable = &.{
-                    .QueryInterface = &@This().QueryInterface,
-                    .AddRef = &@This().AddRef,
-                    .Release = &@This().Release,
-                    .Invoke = &@This().Invoke,
-                },
+            vtable: *const IAsyncOperationCompletedHandlerVTable = &.{
+                .QueryInterface = &@This().QueryInterface,
+                .AddRef = &@This().AddRef,
+                .Release = &@This().Release,
+                .Invoke = &@This().Invoke,
+            },
 
-                io: Io,
-                event: *Io.Event,
+            io: Io,
+            event: Io.Event,
 
-                ref_count: std.atomic.Value(ULONG),
+            ref_count: std.atomic.Value(ULONG),
 
-                fn QueryInterface(ctx: *anyopaque, riid: REFIID, ppvObject: **anyopaque) callconv(.winapi) HRESULT {
-                    const h: *@This() = @ptrCast(@alignCast(ctx));
+            fn QueryInterface(ctx: *anyopaque, riid: REFIID, ppvObject: **anyopaque) callconv(.winapi) HRESULT {
+                const h: *@This() = @ptrCast(@alignCast(ctx));
 
-                    const guids = &[_]REFIID{
-                        IAsyncOperationCompletedHandler(TResult).UUID,
-                        IUnknown.UUID,
-                        IAgileObject.UUID,
-                    };
+                const guids = &[_]REFIID{
+                    IAsyncOperationCompletedHandler(TResult).UUID,
+                    IUnknown.UUID,
+                    IAgileObject.UUID,
+                };
 
-                    if (eqlGuids(riid, guids)) {
-                        _ = h.ref_count.fetchAdd(1, .monotonic);
+                if (eqlGuids(riid, guids)) {
+                    _ = h.ref_count.fetchAdd(1, .monotonic);
 
-                        ppvObject.* = ctx;
-                        return S_OK;
-                    }
-
-                    if (mem.eql(u8, mem.asBytes(riid), mem.asBytes(IMarshal.UUID))) {
-                        @panic("marshal requested!");
-                    }
-
-                    return E_NOINTERFACE;
-                }
-
-                fn AddRef(ctx: *anyopaque) callconv(.winapi) ULONG {
-                    const h: *@This() = @ptrCast(@alignCast(ctx));
-                    return h.ref_count.fetchAdd(1, .monotonic) + 1;
-                }
-
-                fn Release(ctx: *anyopaque) callconv(.winapi) ULONG {
-                    const h: *@This() = @ptrCast(@alignCast(ctx));
-                    return h.ref_count.fetchSub(1, .monotonic) - 1;
-                }
-
-                fn Invoke(ctx: *anyopaque, _ : *IAsyncInfo, _: AsyncStatus) callconv(.winapi) HRESULT {
-                    const h: *@This() = @ptrCast(@alignCast(ctx));
-
-                    h.event.set(h.io);
+                    ppvObject.* = ctx;
                     return S_OK;
                 }
-            };
 
-            var event: Io.Event = .unset;
-            var handler: Handler = .{
-                .io = io,
-                .event = &event,
-                .ref_count = .init(1),
-            };
+                if (mem.eql(u8, mem.asBytes(riid), mem.asBytes(IMarshal.UUID))) {
+                    @panic("marshal requested!");
+                }
 
-            defer assert(handler.vtable.Release(&handler) == 0);
+                return E_NOINTERFACE;
+            }
 
-            defer Release(self);
-            defer Close(self);
+            fn AddRef(ctx: *anyopaque) callconv(.winapi) ULONG {
+                const h: *@This() = @ptrCast(@alignCast(ctx));
+                return h.ref_count.fetchAdd(1, .monotonic) + 1;
+            }
 
+            fn Release(ctx: *anyopaque) callconv(.winapi) ULONG {
+                const h: *@This() = @ptrCast(@alignCast(ctx));
+                return h.ref_count.fetchSub(1, .monotonic) - 1;
+            }
+
+            fn Invoke(ctx: *anyopaque, _ : *IAsyncInfo, _: AsyncStatus) callconv(.winapi) HRESULT {
+                const h: *@This() = @ptrCast(@alignCast(ctx));
+
+                h.event.set(h.io);
+                return S_OK;
+            }
+        };
+
+        pub fn get2(self: Self, handler: *WaitHandler) !TResult {
             var async_info: *IAsyncInfo = undefined;
 
-            try self.handle.QueryInterface(IAsyncInfo.UUID, @ptrCast(&async_info));
+            self.handle.QueryInterface(IAsyncInfo.UUID, @ptrCast(&async_info)) catch unreachable;
             defer async_info.Release();
+            defer async_info.Close();
 
             if (async_info.get_Status() == .Completed) {
                 return self.handle.GetResults();
             }
 
-            try self.handle.put_Completed(@ptrCast(&handler));
-            try event.wait(io);
+            try self.handle.put_Completed(@ptrCast(handler));
+            try handler.event.wait(handler.io);
 
             return switch (async_info.get_Status()) {
                 .Started, .Canceled => unreachable,
@@ -1256,8 +1245,15 @@ pub const GlobalSystemMediaTransportControlsSessionManager = struct {
         var header: HSTRING_HEADER = undefined;
         const class = try WindowsCreateStringReference(unicode.wtf8ToWtf16LeStringLiteral(NAME), &header);
 
-        var static_manager: *IGlobalSystemMediaTransportControlsSessionManagerStatics = undefined;
+        const Operation = AsyncOperation(*IGlobalSystemMediaTransportControlsSessionManager);
+        var handler: Operation.WaitHandler = .{ 
+            .io = io,
+            .event = .unset,
+            .ref_count = .init(1),
+        };
+        defer assert(handler.vtable.Release(&handler) == 0);
 
+        var static_manager: *IGlobalSystemMediaTransportControlsSessionManagerStatics = undefined;
         try RoGetActivationFactory(
             class,
             IGlobalSystemMediaTransportControlsSessionManagerStatics.UUID,
@@ -1265,11 +1261,10 @@ pub const GlobalSystemMediaTransportControlsSessionManager = struct {
         );
         defer static_manager.Release();
 
-        const operation = AsyncOperation(*IGlobalSystemMediaTransportControlsSessionManager) {
-            .handle = try static_manager.RequestAsync(),
-        };
+        const operation: Operation = .{ .handle = try static_manager.RequestAsync() };
+        defer operation.Release();
 
-        return .{ .handle = try operation.get2(io) };
+        return .{ .handle = try operation.get2(&handler) };
     }
 
     pub fn RequestAsync() !AsyncOperation(GlobalSystemMediaTransportControlsSessionManager) {
