@@ -134,7 +134,8 @@ pub fn IAsyncOperationCompletedHandler(comptime TResult: type) type {
     return extern struct {
         vtable: *const IAsyncOperationCompletedHandlerVTable,
 
-        pub const UUID = &GUID.parse("{fcdcf02c-e5d8-4478-915a-4d90b74b83a5}");
+        pub const SIGNATURE = "pinterface({fcdcf02c-e5d8-4478-915a-4d90b74b83a5};" ++ signatureOf(TResult) ++ ")";
+        pub const UUID = uuidFromSignature(SIGNATURE);
 
         pub inline fn Release(self: *IAsyncOperationCompletedHandler(TResult)) void {
             _ = self.vtable.Release(self);
