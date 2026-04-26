@@ -194,6 +194,13 @@ pub const IAsyncInfo = extern struct {
         return errorCode;
     }
 
+    pub fn Cancel(self: *IAsyncInfo) void {
+        const FnType = fn (*IAsyncInfo) callconv(.winapi) HRESULT;
+        const cancel: *const FnType = @ptrCast(self.vtable[9]);
+
+        assert(cancel(self) == windows.S_OK);
+    }
+
     pub fn Close(self: *IAsyncInfo) void {
         const FnType = fn (*IAsyncInfo) callconv(.winapi) HRESULT;
         const close: *const FnType = @ptrCast(self.vtable[10]);
@@ -216,6 +223,15 @@ pub fn IAsyncOperation(comptime T: type) type {
 
         pub inline fn Release(self: *Self) void {
             IUnknown.Release(@ptrCast(self));
+        }
+
+        pub fn Cancel(self: *Self) void {
+            var async_info: *IAsyncInfo = undefined;
+
+            self.QueryInterface(IAsyncInfo.UUID, @ptrCast(&async_info)) catch unreachable;
+            defer async_info.Release();
+
+            async_info.Cancel();
         }
 
         pub fn Close(self: *Self) void {

@@ -1,115 +1,41 @@
 const std = @import("std");
 const windows = @import("windows.zig");
-// const hooks = @import("hooks.zig");
-// const renderer = @import("renderer.zig");
-//
-// const Io = std.Io;
-// const Thread = std.Thread;
-// const Threaded = Io.Threaded;
-//
-// pub export fn __overlap_hook_proc(code: c_int, wParam: windows.WPARAM, lParam: windows.LPARAM) callconv(.winapi) windows.LRESULT {
-//     return windows.user32.CallNextHookEx(null, code, wParam, lParam);
-// }
-//
-// pub var wake_ev: std.Io.Event = .unset;
-// pub var done_ev: std.Io.Event = .unset;
-//
-// var gpa: std.heap.DebugAllocator(.{}) = .init;
-// var io: Io.Threaded = undefined;
-//
-// //var exit: std.atomic.Value(bool) = .init(false);
-//
-// fn entry(_: ?windows.LPVOID) callconv(.winapi) windows.DWORD {
-//     defer Threaded.eventSet(&done_ev);
-//     defer _ = gpa.deinit();
-//
-//     if (!hooks.init(gpa.allocator())) {
-//         return 0;
-//     }
-//
-//     var deinit_renderer = false;
-//     while (true) {
-//         Threaded.eventWait(&wake_ev);
-//         defer wake_ev.reset();
-//
-//         if (exit.load(.monotonic)) {
-//             break;
-//         }
-//
-//         renderer.init(gpa.allocator()) catch {
-//             break;
-//         };
-//         deinit_renderer = true;
-//     }
-//
-//     // we need to ensure that noone can call `renderer.render`
-//     // while `renderer.deinit` is called
-//     // this `hooks.deinit()` should give that guarantee
-//     hooks.deinit();
-//     if (deinit_renderer) renderer.deinit();
-//
-//     return 0;
-// }
-//
-// pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpvReserved: ?windows.LPVOID) callconv(.winapi) windows.BOOL {
-//     switch (fdwReason) {
-//         windows.DLL_PROCESS_ATTACH => {
-//             windows.DisableThreadLibraryCalls(@ptrCast(hinstDLL)) catch {};
-//
-//             const thread = windows.CreateThread(
-//                 null,
-//                 Thread.SpawnConfig.default_stack_size,
-//                 &entry,
-//                 null,
-//                 0,
-//                 null,
-//             ) catch return .FALSE;
-//             windows.CloseHandle(thread);
-//         },
-//         // if lpvReserved is not nil on DLL_PROCESS_DETACH
-//         // it means termination and we should not cleanup
-//         windows.DLL_PROCESS_DETACH => if (lpvReserved == null) {
-//             exit.store(true, .monotonic);
-//             Threaded.eventSet(&wake_ev);
-//             Threaded.eventWait(&done_ev);
-//         },
-//         else => {},
-//     }
-//
-//     return windows.TRUE;
-// }
-//
-// fn logFn(
-//     comptime message_level: std.log.Level,
-//     comptime scope: @EnumLiteral(),
-//     comptime format: []const u8,
-//     args: anytype,
-// ) void {
-//     const level_txt = comptime message_level.asText();
-//     const prefix2 = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
-//
-//     var buffer = [_]u8{'\x00'} ** 4096;
-//     const msg = std.fmt.bufPrintZ(&buffer, "overlap: " ++ level_txt ++ prefix2 ++ format, args) catch blk: {
-//         buffer[buffer.len - 1] = '\x00';
-//         break :blk buffer[0 .. buffer.len - 1 :0];
-//     };
-//
-//     windows.OutputDebugString(msg);
-// }
-//
-// pub const std_options: std.Options = .{
-//     .logFn = logFn,
-// };
+const assert = std.debug.assert;
 
 var wake_ev: windows.HANDLE = undefined;
 var done_ev: windows.HANDLE = undefined;
 
-fn entry(_: windows.LPVOID) callconv(.winapi) windows.DWORD {
-    defer _ = windows.kernel32.SetEvent(done_ev);
+fn libmain(io: std.Io, gpa: std.mem.Allocator) !void {
+    _ = gpa;
 
-    windows.OutputDebugString("Hi from zig 0.16");
-    _ = windows.kernel32.WaitForSingleObjectEx(wake_ev, windows.INFINITE, .FALSE);
-    windows.OutputDebugString("Bye from zig 0.16");
+    const manager = try windows.GlobalSystemMediaTransportControlsSessionManager.Request(io);
+    defer manager.Release();
+
+    if (try manager.GetCurrentSession()) |session| {
+        defer session.Release();
+        windows.OutputDebugString("active session found!");
+    } else {
+        windows.OutputDebugString("no active session found!");
+    }
+
+    assert(windows.kernel32.WaitForSingleObjectEx(wake_ev, windows.INFINITE, .FALSE) == windows.WAIT_OBJECT_0);
+}
+
+fn entry(_: windows.LPVOID) callconv(.winapi) windows.DWORD {
+    defer assert(windows.kernel32.SetEvent(done_ev) != .FALSE);
+
+    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    defer _ = debug_allocator.deinit();
+
+    var threaded: std.Io.Threaded = .init(debug_allocator.allocator(), .{});
+    defer threaded.deinit();
+
+    @call(.always_inline, libmain, .{ threaded.io(), debug_allocator.allocator() }) catch |err| {
+        std.log.err("{t}", .{err});
+        if (@errorReturnTrace()) |trace| {
+            std.debug.dumpErrorReturnTrace(trace);
+        }
+    };
 
     return 0;
 }
@@ -123,8 +49,13 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
         windows.DLL_PROCESS_ATTACH => {
             windows.DisableThreadLibraryCalls(@ptrCast(hinstDLL)) catch {};
 
-            wake_ev = windows.kernel32.CreateEventA(null, .TRUE, .FALSE, null);
-            done_ev = windows.kernel32.CreateEventA(null, .TRUE, .FALSE, null);
+            var ok = false;
+
+            wake_ev = windows.kernel32.CreateEventA(null, .TRUE, .FALSE, null) orelse return .FALSE;
+            defer if (!ok) windows.CloseHandle(wake_ev);
+
+            done_ev = windows.kernel32.CreateEventA(null, .TRUE, .FALSE, null) orelse return .FALSE;
+            defer if (!ok) windows.CloseHandle(done_ev);
 
             const thread = windows.kernel32.CreateThread(
                 null,
@@ -134,15 +65,16 @@ pub export fn DllMain(hinstDLL: windows.HINSTANCE, fdwReason: windows.DWORD, lpv
                 0,
                 null,
             ) orelse return .FALSE;
+
+            ok = true;
             windows.CloseHandle(thread);
         },
         windows.DLL_PROCESS_DETACH => if (lpvReserved == null) {
-            _ = windows.kernel32.SetEvent(wake_ev);
-            _ = windows.kernel32.WaitForSingleObjectEx(done_ev, windows.INFINITE, .FALSE);
+            assert(windows.kernel32.SetEvent(wake_ev) != .FALSE);
+            assert(windows.kernel32.WaitForSingleObjectEx(done_ev, windows.INFINITE, .FALSE) == windows.WAIT_OBJECT_0);
 
             windows.CloseHandle(done_ev);
             windows.CloseHandle(wake_ev);
-            windows.OutputDebugString("Out from zig 0.16");
         },
         else => {},
     }

@@ -11,6 +11,8 @@ const media = @import("windows/media.zig");
 const psapi = @import("windows/psapi.zig");
 const winhttp = @import("windows/winhttp.zig");
 const winrt = @import("windows/winrt.zig");
+
+const Io = std.Io;
 const Allocator = mem.Allocator;
 
 pub const kernel32 = @import("windows/kernel32.zig");
@@ -27,7 +29,18 @@ pub const INT = windows.INT;
 pub const PVOID = windows.PVOID;
 pub const LONG = windows.LONG;
 pub const UINT = windows.UINT;
-pub const S_OK = windows.S_OK;
+pub const S_OK = 0;
+pub const S_FALSE = 0x00000001;
+pub const E_NOTIMPL = @as(c_long, @bitCast(@as(c_ulong, 0x80004001)));
+pub const E_NOINTERFACE = @as(c_long, @bitCast(@as(c_ulong, 0x80004002)));
+pub const E_POINTER = @as(c_long, @bitCast(@as(c_ulong, 0x80004003)));
+pub const E_ABORT = @as(c_long, @bitCast(@as(c_ulong, 0x80004004)));
+pub const E_FAIL = @as(c_long, @bitCast(@as(c_ulong, 0x80004005)));
+pub const E_UNEXPECTED = @as(c_long, @bitCast(@as(c_ulong, 0x8000FFFF)));
+pub const E_ACCESSDENIED = @as(c_long, @bitCast(@as(c_ulong, 0x80070005)));
+pub const E_HANDLE = @as(c_long, @bitCast(@as(c_ulong, 0x80070006)));
+pub const E_OUTOFMEMORY = @as(c_long, @bitCast(@as(c_ulong, 0x8007000E)));
+pub const E_INVALIDARG = @as(c_long, @bitCast(@as(c_ulong, 0x80070057)));
 pub const TRUE = windows.TRUE;
 pub const HWND = windows.HWND;
 pub const GUID = windows.GUID;
@@ -49,14 +62,12 @@ pub const HANDLE = windows.HANDLE;
 pub const LPCWSTR = windows.LPCWSTR;
 pub const LRESULT = windows.LONG_PTR;
 pub const HMODULE = windows.HMODULE;
-pub const HRESULT = windows.HRESULT;
+pub const HRESULT = c_long;
 pub const LPVOID = windows.LPVOID;
 pub const LPCVOID = windows.LPCVOID;
 pub const LONG_PTR = windows.LONG_PTR;
 pub const ULONG_PTR = windows.ULONG_PTR;
 pub const HINSTANCE = windows.HINSTANCE;
-pub const HRESULT_CODE = windows.HRESULT_CODE;
-pub const E_NOINTERFACE = windows.E_NOINTERFACE;
 pub const STD_INPUT_HANDLE = windows.STD_INPUT_HANDLE;
 pub const STD_OUTPUT_HANDLE = windows.STD_OUTPUT_HANDLE;
 pub const STD_ERROR_HANDLE = windows.STD_ERROR_HANDLE;
@@ -64,6 +75,10 @@ pub const SECURITY_ATTRIBUTES = windows.SECURITY_ATTRIBUTES;
 pub const LPSECURITY_ATTRIBUTES = *windows.SECURITY_ATTRIBUTES;
 pub const LPTHREAD_START_ROUTINE = *const windows.THREAD_START_ROUTINE;
 pub const INFINITE = 4294967295;
+
+pub fn HRESULT_CODE(hr: HRESULT) Win32Error {
+    return @enumFromInt(hr & 0xFFFF);
+}
 
 pub const GetCurrentProcessId = windows.GetCurrentProcessId;
 pub const GetCurrentThreadId = windows.GetCurrentThreadId;
@@ -377,11 +392,11 @@ pub const IUnknown = extern struct {
     pub fn QueryInterface(self: *IUnknown, riid: REFIID, ppvObject: **anyopaque) QueryInterfaceError!void {
         const hr = self.vtable.QueryInterface(self, riid, ppvObject);
         return switch (hr) {
-            windows.S_OK => {},
-            windows.E_OUTOFMEMORY => error.OutOfMemory,
-            windows.E_NOINTERFACE => error.InterfaceNotFound,
-            windows.E_POINTER => unreachable,
-            else => windows.unexpectedError(windows.HRESULT_CODE(hr)),
+            S_OK => {},
+            E_OUTOFMEMORY => error.OutOfMemory,
+            E_NOINTERFACE => error.InterfaceNotFound,
+            E_POINTER => unreachable,
+            else => windows.unexpectedError(HRESULT_CODE(hr)),
         };
     }
 
@@ -812,8 +827,8 @@ pub fn RoGetActivationFactory(
 ) RoGetActivationFactoryError!void {
     const hr = combase.RoGetActivationFactory(activatableClassId, iid, factory);
     return switch (hr) {
-        windows.S_OK => {},
-        else => windows.unexpectedError(windows.HRESULT_CODE(hr)),
+        S_OK => {},
+        else => windows.unexpectedError(HRESULT_CODE(hr)),
     };
 }
 
@@ -849,11 +864,11 @@ pub fn WindowsCreateStringReference(sourceString: [:0]const u16, hstringHeader: 
 
     const hr = combase.WindowsCreateStringReference(sourceString.ptr, @intCast(sourceString.len), hstringHeader, &hstring);
     return switch (hr) {
-        windows.S_OK => hstring,
-        windows.E_OUTOFMEMORY => error.OutOfMemory,
-        windows.E_POINTER => unreachable,
-        windows.E_INVALIDARG => unreachable,
-        else => windows.unexpectedError(windows.HRESULT_CODE(hr)),
+        S_OK => hstring,
+        E_OUTOFMEMORY => error.OutOfMemory,
+        E_POINTER => unreachable,
+        E_INVALIDARG => unreachable,
+        else => windows.unexpectedError(HRESULT_CODE(hr)),
     };
 }
 
@@ -968,6 +983,10 @@ pub fn AsyncOperation(comptime TResult: type) type {
             self.handle.Release();
         }
 
+        pub inline fn Cancel(self: Self) void {
+            self.handle.Cancel();
+        }
+
         pub inline fn Close(self: Self) void {
             self.handle.Close();
         }
@@ -1019,6 +1038,106 @@ pub fn AsyncOperation(comptime TResult: type) type {
             defer Release(self);
             defer Close(self);
             return get(self, allocator);
+        }
+
+        // tood: use fieldParentPtrs as not extern struct is not safe
+        pub fn get2(self: Self, io: Io) !TResult {
+            const Handler = struct {
+                comptime {
+                    assert(@offsetOf(@This(), "vtable") == 0);
+                }
+
+                vtable: *const IAsyncOperationCompletedHandlerVTable = &.{
+                    .QueryInterface = &@This().QueryInterface,
+                    .AddRef = &@This().AddRef,
+                    .Release = &@This().Release,
+                    .Invoke = &@This().Invoke,
+                },
+
+                io: Io,
+                event: *Io.Event,
+
+                ref_count: std.atomic.Value(ULONG),
+
+                fn QueryInterface(ctx: *anyopaque, riid: REFIID, ppvObject: **anyopaque) callconv(.winapi) HRESULT {
+                    const h: *@This() = @ptrCast(@alignCast(ctx));
+
+                    const guids = &[_]REFIID{
+                        IAsyncOperationCompletedHandler(TResult).UUID,
+                        IUnknown.UUID,
+                        IAgileObject.UUID,
+                    };
+
+                    if (eqlGuids(riid, guids)) {
+                        _ = h.ref_count.fetchAdd(1, .monotonic);
+
+                        ppvObject.* = ctx;
+                        return S_OK;
+                    }
+
+                    if (mem.eql(u8, mem.asBytes(riid), mem.asBytes(IMarshal.UUID))) {
+                        @panic("marshal requested!");
+                    }
+
+                    return E_NOINTERFACE;
+                }
+
+                fn AddRef(ctx: *anyopaque) callconv(.winapi) ULONG {
+                    const h: *@This() = @ptrCast(@alignCast(ctx));
+                    return h.ref_count.fetchAdd(1, .monotonic) + 1;
+                }
+
+                fn Release(ctx: *anyopaque) callconv(.winapi) ULONG {
+                    const h: *@This() = @ptrCast(@alignCast(ctx));
+                    return h.ref_count.fetchSub(1, .monotonic) - 1;
+                }
+
+                fn Invoke(ctx: *anyopaque, _ : *IAsyncInfo, _: AsyncStatus) callconv(.winapi) HRESULT {
+                    const h: *@This() = @ptrCast(@alignCast(ctx));
+
+                    h.event.set(h.io);
+                    return S_OK;
+                }
+            };
+
+            var event: Io.Event = .unset;
+            var handler: Handler = .{
+                .io = io,
+                .event = &event,
+                .ref_count = .init(1),
+            };
+
+            defer assert(handler.vtable.Release(&handler) == 0);
+
+            defer Release(self);
+            defer Close(self);
+
+            var async_info: *IAsyncInfo = undefined;
+
+            try self.handle.QueryInterface(IAsyncInfo.UUID, @ptrCast(&async_info));
+            defer async_info.Release();
+
+            if (async_info.get_Status() == .Completed) {
+                return self.handle.GetResults();
+            }
+
+            try self.handle.put_Completed(@ptrCast(&handler));
+            try event.wait(io);
+
+            return switch (async_info.get_Status()) {
+                .Started, .Canceled => unreachable,
+                .Completed => self.handle.GetResults(),
+                .Error => {
+                    // todo:
+                    // if needed we could pass in TResult and TError
+                    // as these Errors depends on the operation
+                    const hr = async_info.get_ErrorCode();
+                    return switch (hr) {
+                        E_OUTOFMEMORY => error.OutOfMemory,
+                        else => unexpectedError(HRESULT_CODE(hr)),
+                    };
+                },
+            };
         }
     };
 }
@@ -1127,6 +1246,26 @@ pub const GlobalSystemMediaTransportControlsSessionManager = struct {
 
     pub const SIGNATURE = IGlobalSystemMediaTransportControlsSessionManager.SIGNATURE;
     pub const NAME = IGlobalSystemMediaTransportControlsSessionManager.NAME;
+
+    pub fn Request(io: Io) !GlobalSystemMediaTransportControlsSessionManager {
+        var header: HSTRING_HEADER = undefined;
+        const class = try WindowsCreateStringReference(unicode.wtf8ToWtf16LeStringLiteral(NAME), &header);
+
+        var static_manager: *IGlobalSystemMediaTransportControlsSessionManagerStatics = undefined;
+
+        try RoGetActivationFactory(
+            class,
+            IGlobalSystemMediaTransportControlsSessionManagerStatics.UUID,
+            @ptrCast(&static_manager),
+        );
+        defer static_manager.Release();
+
+        const operation = AsyncOperation(*IGlobalSystemMediaTransportControlsSessionManager) {
+            .handle = try static_manager.RequestAsync(),
+        };
+
+        return .{ .handle = try operation.get2(io) };
+    }
 
     pub fn RequestAsync() !AsyncOperation(GlobalSystemMediaTransportControlsSessionManager) {
         var header: HSTRING_HEADER = undefined;

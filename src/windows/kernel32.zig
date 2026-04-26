@@ -41,7 +41,7 @@ pub extern "kernel32" fn CreateEventA(
     bManualReset: BOOL,
     bInitialState: BOOL,
     lpName: ?LPCSTR,
-) callconv(.winapi) HANDLE;
+) callconv(.winapi) ?HANDLE;
 
 pub extern "kernel32" fn SetEvent(hEvent: HANDLE) callconv(.winapi) BOOL;
 
