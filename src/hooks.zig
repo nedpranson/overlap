@@ -1,6 +1,7 @@
 const std = @import("std");
 const windows = @import("windows.zig");
 const detours = @import("detours.zig");
+const dxgi = @import("hooks/dxgi.zig");
 
 const mem = std.mem;
 
@@ -13,9 +14,11 @@ pub fn init() !void {
     thread = windows.GetCurrentThread();
 
     // todo: ping unavtive hooks
-    if (windows.GetModuleHandle("d3d11.dll")) |_| {
-        windows.OutputDebugString("seen d3d11.dll");
-    }
+    // if (windows.GetModuleHandle("d3d11.dll")) |_| {
+    //     windows.OutputDebugString("seen d3d11.dll");
+    // }
+
+    dxgi.init() catch {};
 
     try detours.TransactionBegin();
     errdefer detours.TransactionAbort() catch {};

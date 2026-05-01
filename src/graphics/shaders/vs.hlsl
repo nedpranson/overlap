@@ -7,7 +7,7 @@ struct VertexInput
 {
   float2 pos : POSITION;
   float2 uv  : TEXCOORD0;
-  uint   col : COLOR0;
+  uint col   : COLOR0;
   uint flags : TEXCOORD1;
 };
 

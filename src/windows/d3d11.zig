@@ -296,7 +296,7 @@ pub const ID3D11Device = extern struct {
         const create_buffer: *const FnType = @ptrCast(self.vtable[3]);
 
         const hr = create_buffer(self, pDesc, pInitialData, ppBuffer);
-        return switch (D3D11_ERROR_CODE(hr)) {
+        return switch (hr) {
             .S_OK => {},
             else => |err| unexpectedError(err),
         };
@@ -317,7 +317,7 @@ pub const ID3D11Device = extern struct {
         const create_texture_2d: *const FnType = @ptrCast(self.vtable[5]);
 
         const hr = create_texture_2d(self, pDesc, pInitialData, ppTexture2D);
-        return switch (D3D11_ERROR_CODE(hr)) {
+        return switch (hr) {
             .S_OK => {},
             .E_OUTOFMEMORY => error.OutOfMemory,
             else => |err| unexpectedError(err),
@@ -339,7 +339,7 @@ pub const ID3D11Device = extern struct {
         const create_shader_resource_view: *const FnType = @ptrCast(self.vtable[7]);
 
         const hr = create_shader_resource_view(self, pResource, pDesc, ppSRView);
-        return switch (D3D11_ERROR_CODE(hr)) {
+        return switch (hr) {
             .S_OK => {},
             .E_OUTOFMEMORY => error.OutOfMemory,
             else => |err| unexpectedError(err),
@@ -358,7 +358,7 @@ pub const ID3D11Device = extern struct {
         const create_render_target_view: *const FnType = @ptrCast(self.vtable[9]);
 
         const hr = create_render_target_view(self, pResource, pDesc, ppRTView);
-        return switch (D3D11_ERROR_CODE(hr)) {
+        return switch (hr) {
             .S_OK => {},
             else => |err| unexpectedError(err),
         };
@@ -376,7 +376,7 @@ pub const ID3D11Device = extern struct {
         const create_input_layout: *const FnType = @ptrCast(self.vtable[11]);
 
         const hr = create_input_layout(self, InputElementDescs.ptr, @intCast(InputElementDescs.len), ShaderBytecodeWithInputSignature.ptr, ShaderBytecodeWithInputSignature.len, ppInputLayout);
-        return switch (D3D11_ERROR_CODE(hr)) {
+        return switch (hr) {
             .S_OK => {},
             else => |err| unexpectedError(err),
         };
@@ -394,7 +394,7 @@ pub const ID3D11Device = extern struct {
         const create_vertex_shader: *const FnType = @ptrCast(self.vtable[12]);
 
         const hr = create_vertex_shader(self, ShaderBytecode.ptr, ShaderBytecode.len, pClassLinkage, ppVertexShader);
-        return switch (D3D11_ERROR_CODE(hr)) {
+        return switch (hr) {
             .S_OK => {},
             else => |err| unexpectedError(err),
         };
@@ -410,7 +410,7 @@ pub const ID3D11Device = extern struct {
         const create_pixel_shader: *const FnType = @ptrCast(self.vtable[15]);
 
         const hr = create_pixel_shader(self, ShaderBytecode.ptr, ShaderBytecode.len, pClassLinkage, ppPixelShader);
-        return switch (D3D11_ERROR_CODE(hr)) {
+        return switch (hr) {
             .S_OK => {},
             else => |err| unexpectedError(err),
         };
@@ -427,7 +427,7 @@ pub const ID3D11Device = extern struct {
         const create_blend_state: *const FnType = @ptrCast(self.vtable[20]);
 
         const hr = create_blend_state(self, pBlendStateDesc, ppBlendState);
-        return switch (D3D11_ERROR_CODE(hr)) {
+        return switch (hr) {
             .S_OK => {},
             else => |err| unexpectedError(err),
         };
@@ -444,7 +444,7 @@ pub const ID3D11Device = extern struct {
         const create_sampler_state: *const FnType = @ptrCast(self.vtable[23]);
 
         const hr = create_sampler_state(self, pSamplerDesc, ppSamplerState);
-        return switch (D3D11_ERROR_CODE(hr)) {
+        return switch (hr) {
             .S_OK => {},
             else => |err| unexpectedError(err),
         };
@@ -572,7 +572,7 @@ pub const ID3D11DeviceContext = extern struct {
         const map: *const FnType = @ptrCast(self.vtable[14]);
 
         const hr = map(self, pResource, Subresource, MapType, MapFlags, pMappedResource);
-        return switch (D3D11_ERROR_CODE(hr)) {
+        return switch (hr) {
             .S_OK => {},
             .E_OUTOFMEMORY => error.OutOfMemory,
             else => |err| unexpectedError(err),
@@ -861,25 +861,20 @@ pub extern "d3d11" fn D3D11CreateDeviceAndSwapChain(
     ppDevice: **ID3D11Device,
     pFeatureLevel: ?*D3D_FEATURE_LEVEL,
     ppImmediateContext: **ID3D11DeviceContext,
-) callconv(.winapi) HRESULT;
-
-pub inline fn D3D11_ERROR_CODE(hr: HRESULT) D3D11_ERROR {
-    return @enumFromInt(hr);
-}
+) callconv(.winapi) D3D11_ERROR;
 
 pub const UnexpectedError = error{
     Unexpected,
 };
 
-// tood: only print this error.Unexpected on Debug/ReleaseSafe
-pub fn unexpectedError(d3d11_err: D3D11_ERROR) UnexpectedError {
-    if (std.posix.unexpected_error_tracing) {
-        const tag_name = std.enums.tagName(D3D11_ERROR, d3d11_err) orelse "";
-        std.debug.print("error.Unexpected: DXGI_ERROR({d}): {s}\n", .{
-            @intFromEnum(d3d11_err),
-            tag_name,
+pub fn unexpectedError(err: D3D11_ERROR) UnexpectedError {
+    @branchHint(.cold);
+    if (std.options.unexpected_error_tracing) {
+        std.debug.print("error.Unexpected D3D11_ERROR=0x{x} ({s})\n", .{
+            @intFromEnum(err),
+            std.enums.tagName(D3D11_ERROR, err) orelse "<unnamed>",
         });
-        std.debug.dumpCurrentStackTrace(@returnAddress());
+        std.debug.dumpCurrentStackTrace(.{ .first_address = @returnAddress() });
     }
     return error.Unexpected;
 }

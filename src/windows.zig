@@ -41,7 +41,6 @@ pub const E_ACCESSDENIED = @as(c_long, @bitCast(@as(c_ulong, 0x80070005)));
 pub const E_HANDLE = @as(c_long, @bitCast(@as(c_ulong, 0x80070006)));
 pub const E_OUTOFMEMORY = @as(c_long, @bitCast(@as(c_ulong, 0x8007000E)));
 pub const E_INVALIDARG = @as(c_long, @bitCast(@as(c_ulong, 0x80070057)));
-pub const TRUE = windows.TRUE;
 pub const HWND = windows.HWND;
 pub const GUID = windows.GUID;
 pub const BOOL = windows.BOOL;
@@ -75,6 +74,7 @@ pub const SECURITY_ATTRIBUTES = windows.SECURITY_ATTRIBUTES;
 pub const LPSECURITY_ATTRIBUTES = *windows.SECURITY_ATTRIBUTES;
 pub const LPTHREAD_START_ROUTINE = *const windows.THREAD_START_ROUTINE;
 pub const INFINITE = 4294967295;
+pub const WINBOOL = BOOL;
 
 pub fn HRESULT_CODE(hr: HRESULT) Win32Error {
     return @enumFromInt(hr & 0xFFFF);
@@ -155,6 +155,7 @@ pub const NTSTATUS = windows.NTSTATUS;
 pub const HMENU = windows.HMENU;
 pub const PCNZWCH = windows.PCWSTR;
 pub const REFIID = *const windows.GUID;
+pub const REFGUID = *const windows.GUID;
 pub const HINTERNET = winhttp.HINTERNET;
 pub const INTERNET_PORT = winhttp.INTERNET_PORT;
 pub const IAsyncOperation = winrt.IAsyncOperation;
@@ -353,7 +354,7 @@ pub fn CreateWindowEx(
 }
 
 pub fn DestroyWindow(hWnd: HWND) void {
-    assert(user32.DestroyWindow(hWnd) == TRUE);
+    assert(user32.DestroyWindow(hWnd) != .FALSE);
 }
 
 pub const IAgileObject = extern struct {
@@ -635,7 +636,7 @@ pub fn GetClassNameA(hWnd: HWND, buffer: []u8) GetClassNameError![:0]const u8 {
 }
 
 pub fn WinHttpCloseHandle(hInternet: HINTERNET) void {
-    assert(winhttp.WinHttpCloseHandle(hInternet) == TRUE);
+    assert(winhttp.WinHttpCloseHandle(hInternet) != .FALSE);
 }
 
 pub const WinHttpConnectError = error{Unexpected};

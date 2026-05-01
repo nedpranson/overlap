@@ -1,5 +1,5 @@
-const std = @import("std");
-const HRESULT = std.os.windows.HRESULT;
+const windows = @import("../windows.zig");
+const HRESULT = windows.HRESULT;
 
 pub const DXGI_ERROR = enum(HRESULT) {
     SUCCESS = 0,

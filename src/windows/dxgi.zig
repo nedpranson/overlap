@@ -12,8 +12,13 @@ const UINT = windows.UINT;
 const ULONG = windows.ULONG;
 const HRESULT = windows.HRESULT;
 const REFIID = windows.REFIID;
+const REFGUID = windows.REFGUID;
+const IUnknown = windows.IUnknown;
+const WINBOOL = windows.WINBOOL;
+const LARGE_INTEGER = windows.LARGE_INTEGER;
 
 pub const IDXGIAdapter = *opaque {};
+pub const IDXGIOutput = *opaque {};
 
 pub const DXGI_FORMAT = INT;
 pub const DXGI_FORMAT_R32G32B32_FLOAT = 6;
@@ -36,6 +41,14 @@ pub const DXGI_MODE_SCALING = INT;
 pub const DXGI_RATIONAL = extern struct {
     Numerator: UINT,
     Denominator: UINT,
+};
+
+pub const DXGI_FRAME_STATISTICS = extern struct {
+    PresentCount: UINT,
+    PresentRefreshCount: UINT,
+    SyncRefreshCount: UINT,
+    SyncQPCTime: LARGE_INTEGER,
+    SyncGPUTime: LARGE_INTEGER,
 };
 
 pub const DXGI_MODE_DESC = extern struct {
@@ -64,38 +77,52 @@ pub const DXGI_SWAP_CHAIN_DESC = extern struct {
 };
 
 pub const IDXGISwapChain = extern struct {
-    vtable: *const [18]*const anyopaque,
+    vtable: *const IDXGISwapChainVTable,
 
     pub inline fn AddRef(self: *IDXGISwapChain) void {
-        const FnType = fn (*IDXGISwapChain) callconv(.winapi) ULONG;
-        const add_ref: *const FnType = @ptrCast(self.vtable[1]);
-
-        _ = add_ref(self);
+        _ = self.vtable.AddRef(self);
     }
 
     pub inline fn Release(self: *IDXGISwapChain) void {
-        const FnType = fn (*IDXGISwapChain) callconv(.winapi) ULONG;
-        const release: *const FnType = @ptrCast(self.vtable[2]);
-
-        _ = release(self);
+        _ = self.vtable.Release(self);
     }
 
     pub const GetDeviceError = error{Unexpected};
 
-    pub fn GetDevice(
-        self: *IDXGISwapChain,
-        riid: REFIID,
-        ppDevice: **anyopaque,
-    ) GetDeviceError!void {
-        const FnType = fn (*IDXGISwapChain, REFIID, **anyopaque) callconv(.winapi) HRESULT;
-        const get_device: *const FnType = @ptrCast(self.vtable[7]);
+    pub fn GetDevice(self: *IDXGISwapChain, comptime T: type) GetDeviceError!*T {
+        var device: *T = undefined;
+        const result = self.vtable.GetDevice(self, T.UUID, @ptrCast(&device));
 
-        const hr = get_device(self, riid, ppDevice);
-        return switch (DXGI_ERROR_CODE(hr)) {
-            .SUCCESS => {},
+        return switch (DXGI_ERROR_CODE(result)) {
+            .SUCCESS => device,
             else => |err| unexpectedError(err),
         };
     }
+
+    // pub fn GetDevice(
+    //     self: *IDXGISwapChain,
+    //     riid: REFIID,
+    //     ppDevice: **anyopaque,
+    // ) GetDeviceError!void {
+    //     const hr = self.vtable.GetDevice(self, riid, ppDevice);
+    //     return switch (DXGI_ERROR_CODE(hr)) {
+    //         .SUCCESS => {},
+    //         else => |err| unexpectedError(err),
+    //     };
+    // }
+
+    pub const GetDescError = error{Unexpected};
+
+    pub fn GetDesc(self: *IDXGISwapChain) GetDescError!DXGI_SWAP_CHAIN_DESC {
+        var pDesc: DXGI_SWAP_CHAIN_DESC = undefined;
+
+        const hr = self.vtable.getDesc(self, &pDesc);
+        return switch (DXGI_ERROR_CODE(hr)) {
+            .SUCCESS => pDesc,
+            else => |err| unexpectedError(err),
+        };
+    }
+
 
     pub const GetBufferError = error{Unexpected};
 
@@ -105,32 +132,33 @@ pub const IDXGISwapChain = extern struct {
         riid: REFIID,
         ppSurface: **anyopaque,
     ) GetBufferError!void {
-        const FnType = fn (*IDXGISwapChain, UINT, REFIID, **anyopaque) callconv(.winapi) HRESULT;
-        const get_buffer: *const FnType = @ptrCast(self.vtable[9]);
-
-        const hr = get_buffer(self, Buffer, riid, ppSurface);
+        const hr = self.vtable.GetBuffer(self, Buffer, riid, ppSurface);
         return switch (DXGI_ERROR_CODE(hr)) {
             .SUCCESS => {},
             else => |err| unexpectedError(err),
         };
     }
+};
 
-    pub const GetDescError = error{
-        Unexpected,
-    };
-
-    pub fn GetDesc(self: *IDXGISwapChain) GetDescError!DXGI_SWAP_CHAIN_DESC {
-        const FnType = fn (*IDXGISwapChain, *DXGI_SWAP_CHAIN_DESC) callconv(.winapi) HRESULT;
-        const get_desc: *const FnType = @ptrCast(self.vtable[12]);
-
-        var pDesc: DXGI_SWAP_CHAIN_DESC = undefined;
-
-        const hr = get_desc(self, &pDesc);
-        return switch (DXGI_ERROR_CODE(hr)) {
-            .SUCCESS => pDesc,
-            else => |err| unexpectedError(err),
-        };
-    }
+const IDXGISwapChainVTable = extern struct {
+    QueryInterface: *const fn (*IDXGISwapChain, riid: REFIID, ppvObject: **anyopaque) callconv(.winapi) HRESULT,
+    AddRef: *const fn (*IDXGISwapChain) callconv(.winapi) ULONG,
+    Release: *const fn (*IDXGISwapChain) callconv(.winapi) ULONG,
+    SetPrivateData: *const fn (*IDXGISwapChain, guid: REFGUID, data_size: UINT, data: *const anyopaque) callconv(.winapi) HRESULT,
+    SetPrivateDataInterface: *const fn (*IDXGISwapChain, guid: REFGUID, objecta: *const IUnknown) callconv(.winapi) HRESULT,
+    GetPrivateData: *const fn (*IDXGISwapChain, guid: REFGUID, data_size: UINT, data: *anyopaque) callconv(.winapi) HRESULT,
+    GetParent: *const fn (*IDXGISwapChain, riid: REFIID, parent: **anyopaque) callconv(.winapi) HRESULT,
+    GetDevice: *const fn (*IDXGISwapChain, riid: REFIID, device: **anyopaque) callconv(.winapi) HRESULT,
+    Present: *const fn (*IDXGISwapChain, sync_interval: UINT, flags: UINT) callconv(.winapi) HRESULT,
+    GetBuffer: *const fn (*IDXGISwapChain, buffer_idx: UINT, riid: REFIID, surface: **anyopaque) callconv(.winapi) HRESULT,
+    SetFullscreenState: *const fn (*IDXGISwapChain, fullscreen: WINBOOL, target: *IDXGIOutput) callconv(.winapi) HRESULT,
+    GetFullscreenState: *const fn (*IDXGISwapChain, fullscreen: *WINBOOL, target: **IDXGIOutput) callconv(.winapi) HRESULT,
+    GetDesc: *const fn (*IDXGISwapChain, desc: *DXGI_SWAP_CHAIN_DESC) callconv(.winapi) HRESULT,
+    ResizeBuffers: *const fn (*IDXGISwapChain, buffer_count: UINT, width: UINT, height: UINT, format: DXGI_FORMAT, flags: UINT) callconv(.winapi) HRESULT,
+    ResizeTarget: *const fn (*IDXGISwapChain, target_mode_desc: *const DXGI_MODE_DESC) callconv(.winapi) HRESULT,
+    GetContainingOutput: *const fn (*IDXGISwapChain, output: **IDXGIOutput) callconv(.winapi) HRESULT,
+    GetFrameStatistics: *const fn (*IDXGISwapChain, stats: *DXGI_FRAME_STATISTICS) callconv(.winapi) HRESULT,
+    GetLastPresentCount: *const fn (*IDXGISwapChain, last_present_count: *UINT) callconv(.winapi) HRESULT,
 };
 
 pub inline fn DXGI_ERROR_CODE(hr: HRESULT) DXGI_ERROR {
@@ -141,15 +169,14 @@ pub const UnexpectedError = error{
     Unexpected,
 };
 
-// tood: only print this error.Unexpected on Debug/ReleaseSafe
-pub fn unexpectedError(dxgi_err: DXGI_ERROR) UnexpectedError {
-    if (std.posix.unexpected_error_tracing) {
-        const tag_name = std.enums.tagName(DXGI_ERROR, dxgi_err) orelse "";
-        std.debug.print("error.Unexpected: DXGI_ERROR({d}): {s}\n", .{
-            @intFromEnum(dxgi_err),
-            tag_name,
+pub fn unexpectedError(err: DXGI_ERROR) UnexpectedError {
+    @branchHint(.cold);
+    if (std.options.unexpected_error_tracing) {
+        std.debug.print("error.Unexpected DXGI_ERROR=0x{x} ({s})\n", .{
+            @intFromEnum(err),
+            std.enums.tagName(DXGI_ERROR, err) orelse "<unnamed>",
         });
-        std.debug.dumpCurrentStackTrace(@returnAddress());
+        std.debug.dumpCurrentStackTrace(.{ .first_address = @returnAddress() });
     }
     return error.Unexpected;
 }
