@@ -99,18 +99,6 @@ pub const IDXGISwapChain = extern struct {
         };
     }
 
-    // pub fn GetDevice(
-    //     self: *IDXGISwapChain,
-    //     riid: REFIID,
-    //     ppDevice: **anyopaque,
-    // ) GetDeviceError!void {
-    //     const hr = self.vtable.GetDevice(self, riid, ppDevice);
-    //     return switch (DXGI_ERROR_CODE(hr)) {
-    //         .SUCCESS => {},
-    //         else => |err| unexpectedError(err),
-    //     };
-    // }
-
     pub const GetDescError = error{Unexpected};
 
     pub fn GetDesc(self: *IDXGISwapChain) GetDescError!DXGI_SWAP_CHAIN_DESC {
@@ -129,12 +117,13 @@ pub const IDXGISwapChain = extern struct {
     pub fn GetBuffer(
         self: *IDXGISwapChain,
         Buffer: UINT,
-        riid: REFIID,
-        ppSurface: **anyopaque,
-    ) GetBufferError!void {
-        const hr = self.vtable.GetBuffer(self, Buffer, riid, ppSurface);
+        comptime T: type,
+    ) GetBufferError!*T {
+        var surface: *T = undefined;
+        const hr = self.vtable.GetBuffer(self, Buffer, T.UUID, @ptrCast(&surface));
+
         return switch (DXGI_ERROR_CODE(hr)) {
-            .SUCCESS => {},
+            .SUCCESS => surface,
             else => |err| unexpectedError(err),
         };
     }

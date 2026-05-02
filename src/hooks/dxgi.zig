@@ -17,10 +17,10 @@ var release: *@TypeOf(Release) = undefined;
 var present: *@TypeOf(Present) = undefined;
 var resize_buffers: *@TypeOf(ResizeBuffers) = undefined;
 
-var swapchain_map: std.array_hash_map.Auto(*dxgi.IDXGISwapChain, *gfx.Backend) = .empty;
+var swapchain_map: std.array_hash_map.Auto(*dxgi.IDXGISwapChain, BackendHandle) = .empty;
 var io: Io = undefined;
 var mu: Io.RwLock = .init;
-var gpa: Allocator = undefined;
+var gpa2: Allocator = undefined;
 
 pub fn init() !void {
     const mod = windows.GetModuleHandle("d3d11.dll") orelse return error.ModuleNotFound;
@@ -120,11 +120,44 @@ pub fn deinit() !void {
     try detours.TransactionCommit();
 }
 
+const BackendHandle = struct {
+    interface: *gfx.Backend,
+    deinitfn: *const fn (*gfx.Backend, gpa: Allocator) void,
+
+    pub fn wrap(backend: anytype) BackendHandle {
+        const T = switch (@typeInfo(@TypeOf(backend))) {
+            .pointer => |p| p.child,
+            else => @compileError("wrap expects a pointer"),
+        };
+
+        return .{
+            .interface = &backend.interface,
+            .deinitfn = struct {
+                fn deinit(gfx_backend: *gfx.Backend, gpa: Allocator) void {
+                    const b: *T = @alignCast(@fieldParentPtr("interface", gfx_backend));
+
+                    b.deinit();
+                    gpa.destroy(b);
+                }
+            }.deinit,
+        };
+    }
+
+    inline fn deinit(h: BackendHandle, gpa: Allocator) void {
+        h.deinitfn(h.interface, gpa);
+    }
+};
+
 fn Release(pSwapChain: *dxgi.IDXGISwapChain) callconv(.winapi) windows.ULONG {
     const refs = release(pSwapChain);
 
     if (refs == 0) {
-        // deinit
+        mu.lockUncancelable(io);
+        defer mu.unlock(io);
+
+        if (swapchain_map.fetchSwapRemove(pSwapChain)) |kv| {
+            kv.value.deinit(gpa2);
+        }
     }
 
     return refs;
@@ -135,7 +168,7 @@ fn Present(
     SyncInterval: windows.UINT,
     Flags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
-    const state = blk: {
+    const state = (blk: {
         mu.lockSharedUncancelable(io);
         defer mu.unlockShared(io);
 
@@ -143,26 +176,26 @@ fn Present(
     } orelse blk: {
         @branchHint(.unlikely);
 
-        // if (pSwapChain.GetDevice(d3d11.ID3D11Device)) |device| {
-        //     const context = device.GetImmediateContext();
-        //
-        //     std.debug.print("{}\n", .{device});
-        // } else |_| {
-        // }
+        // todo: free on errors
 
-        // create
-        // put
+        const backend = gpa2.create(gfx.d3d11.Backend) catch return windows.E_OUTOFMEMORY;
+        const handle: BackendHandle = .wrap(backend);
 
-        // todo: alloc
-        var b: @import("../graphics/backends/D3D11.zig") = .init(undefined);
-        const backend = &b.interface;
+        // defer handle.deinit(gpa2);
+
+        //defer gpa.destroy(backend);
+
+        //backend.* = gfx.d3d11.Backend.init(pSwapChain) catch @panic("todo");
         
         mu.lockUncancelable(io);
         defer mu.unlock(io);
 
-        swapchain_map.put(gpa, pSwapChain, backend) catch return windows.E_OUTOFMEMORY;
-        break :blk backend;
-    };
+        swapchain_map.put(gpa2, pSwapChain, handle) catch return windows.E_OUTOFMEMORY;
+        break :blk handle;
+    }).interface;
+
+    //state.draw() catch |err| {
+    //};
 
     std.debug.print("{}\n", .{state});
 

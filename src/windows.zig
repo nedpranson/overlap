@@ -75,6 +75,9 @@ pub const LPSECURITY_ATTRIBUTES = *windows.SECURITY_ATTRIBUTES;
 pub const LPTHREAD_START_ROUTINE = *const windows.THREAD_START_ROUTINE;
 pub const INFINITE = 4294967295;
 pub const WINBOOL = BOOL;
+pub const ID3DBlob = d3dcompiler.ID3DBlob;
+pub const D3D_SHADER_MACRO = d3dcompiler.D3D_SHADER_MACRO;
+pub const ID3DInclude = d3dcompiler.ID3DInclude;
 
 pub fn HRESULT_CODE(hr: HRESULT) Win32Error {
     return @enumFromInt(hr & 0xFFFF);

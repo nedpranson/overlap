@@ -292,12 +292,12 @@ pub const ID3D11Device = extern struct {
         pInitialData: ?*const D3D11_SUBRESOURCE_DATA,
         ppBuffer: **ID3D11Buffer,
     ) CreateBufferError!void {
-        const FnType = fn (*ID3D11Device, *D3D11_BUFFER_DESC, ?*const D3D11_SUBRESOURCE_DATA, ?**ID3D11Buffer) callconv(.winapi) HRESULT;
+        const FnType = fn (*ID3D11Device, *D3D11_BUFFER_DESC, ?*const D3D11_SUBRESOURCE_DATA, ?**ID3D11Buffer) callconv(.winapi) D3D11_ERROR;
         const create_buffer: *const FnType = @ptrCast(self.vtable[3]);
 
         const hr = create_buffer(self, pDesc, pInitialData, ppBuffer);
         return switch (hr) {
-            .S_OK => {},
+            .OK => {},
             else => |err| unexpectedError(err),
         };
     }
@@ -352,14 +352,15 @@ pub const ID3D11Device = extern struct {
         self: *ID3D11Device,
         pResource: *ID3D11Resource,
         pDesc: ?*const D3D11_RENDER_TARGET_VIEW_DESC,
-        ppRTView: **ID3D11RenderTargetView,
-    ) CreateRenderTargetViewError!void {
-        const FnType = fn (*ID3D11Device, *ID3D11Resource, ?*const D3D11_RENDER_TARGET_VIEW_DESC, ?**ID3D11RenderTargetView) callconv(.winapi) HRESULT;
+    ) CreateRenderTargetViewError!*ID3D11RenderTargetView {
+        const FnType = fn (*ID3D11Device, *ID3D11Resource, ?*const D3D11_RENDER_TARGET_VIEW_DESC, ?**ID3D11RenderTargetView) callconv(.winapi) D3D11_ERROR;
         const create_render_target_view: *const FnType = @ptrCast(self.vtable[9]);
 
-        const hr = create_render_target_view(self, pResource, pDesc, ppRTView);
-        return switch (hr) {
-            .S_OK => {},
+        var rtv_view: *ID3D11RenderTargetView = undefined;
+        const result = create_render_target_view(self, pResource, pDesc, &rtv_view);
+
+        return switch (result) {
+            .OK => rtv_view,
             else => |err| unexpectedError(err),
         };
     }
@@ -372,12 +373,12 @@ pub const ID3D11Device = extern struct {
         ShaderBytecodeWithInputSignature: []const u8,
         ppInputLayout: ?**ID3D11InputLayout,
     ) !void {
-        const FnType = fn (*ID3D11Device, [*]const D3D11_INPUT_ELEMENT_DESC, UINT, [*]const u8, SIZE_T, ?**ID3D11InputLayout) callconv(.winapi) HRESULT;
+        const FnType = fn (*ID3D11Device, [*]const D3D11_INPUT_ELEMENT_DESC, UINT, [*]const u8, SIZE_T, ?**ID3D11InputLayout) callconv(.winapi) D3D11_ERROR;
         const create_input_layout: *const FnType = @ptrCast(self.vtable[11]);
 
-        const hr = create_input_layout(self, InputElementDescs.ptr, @intCast(InputElementDescs.len), ShaderBytecodeWithInputSignature.ptr, ShaderBytecodeWithInputSignature.len, ppInputLayout);
-        return switch (hr) {
-            .S_OK => {},
+        const result = create_input_layout(self, InputElementDescs.ptr, @intCast(InputElementDescs.len), ShaderBytecodeWithInputSignature.ptr, ShaderBytecodeWithInputSignature.len, ppInputLayout);
+        return switch (result) {
+            .OK => {},
             else => |err| unexpectedError(err),
         };
     }
@@ -390,12 +391,12 @@ pub const ID3D11Device = extern struct {
         pClassLinkage: ?*ID3D11ClassLinkage,
         ppVertexShader: **ID3D11VertexShader,
     ) CreateShaderError!void {
-        const FnType = fn (*ID3D11Device, LPCVOID, SIZE_T, ?*ID3D11ClassLinkage, **ID3D11VertexShader) callconv(.winapi) HRESULT;
+        const FnType = fn (*ID3D11Device, LPCVOID, SIZE_T, ?*ID3D11ClassLinkage, **ID3D11VertexShader) callconv(.winapi) D3D11_ERROR;
         const create_vertex_shader: *const FnType = @ptrCast(self.vtable[12]);
 
         const hr = create_vertex_shader(self, ShaderBytecode.ptr, ShaderBytecode.len, pClassLinkage, ppVertexShader);
         return switch (hr) {
-            .S_OK => {},
+            .OK => {},
             else => |err| unexpectedError(err),
         };
     }
@@ -423,12 +424,12 @@ pub const ID3D11Device = extern struct {
         pBlendStateDesc: *const D3D11_BLEND_DESC,
         ppBlendState: **ID3D11BlendState,
     ) CreateBlendStateError!void {
-        const FnType = fn (*ID3D11Device, *const D3D11_BLEND_DESC, **ID3D11BlendState) callconv(.winapi) HRESULT;
+        const FnType = fn (*ID3D11Device, *const D3D11_BLEND_DESC, **ID3D11BlendState) callconv(.winapi) D3D11_ERROR;
         const create_blend_state: *const FnType = @ptrCast(self.vtable[20]);
 
         const hr = create_blend_state(self, pBlendStateDesc, ppBlendState);
         return switch (hr) {
-            .S_OK => {},
+            .OK => {},
             else => |err| unexpectedError(err),
         };
     }
@@ -440,12 +441,12 @@ pub const ID3D11Device = extern struct {
         pSamplerDesc: *const D3D11_SAMPLER_DESC,
         ppSamplerState: **ID3D11SamplerState,
     ) CreateSamplerStateError!void {
-        const FnType = fn (*ID3D11Device, *const D3D11_SAMPLER_DESC, **ID3D11SamplerState) callconv(.winapi) HRESULT;
+        const FnType = fn (*ID3D11Device, *const D3D11_SAMPLER_DESC, **ID3D11SamplerState) callconv(.winapi) D3D11_ERROR;
         const create_sampler_state: *const FnType = @ptrCast(self.vtable[23]);
 
         const hr = create_sampler_state(self, pSamplerDesc, ppSamplerState);
         return switch (hr) {
-            .S_OK => {},
+            .OK => {},
             else => |err| unexpectedError(err),
         };
     }

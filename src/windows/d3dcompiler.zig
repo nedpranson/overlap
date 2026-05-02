@@ -1,6 +1,7 @@
-const std = @import("std");
-const d3dcommon = @import("d3dcommon.zig");
-const windows = std.os.windows;
+const windows = @import("../windows.zig");
+
+const d3dcommon = windows.d3dcommon;
+const d3d11 = windows.d3d11;
 
 const UINT = windows.UINT;
 const SIZE_T = windows.SIZE_T;
@@ -8,6 +9,7 @@ const LPCSTR = windows.LPCSTR;
 const HRESULT = windows.HRESULT;
 const LPCVOID = windows.LPCVOID;
 const ID3DBlob = d3dcommon.ID3DBlob;
+const D3D11_ERROR = d3d11.D3D11_ERROR;
 
 pub const ID3DInclude = *opaque {};
 
@@ -28,4 +30,4 @@ pub extern "d3dcompiler_47" fn D3DCompile(
     Flags2: UINT,
     ppCode: **ID3DBlob,
     ppErrorMsgs: ?**ID3DBlob,
-) callconv(.winapi) HRESULT;
+) callconv(.winapi) D3D11_ERROR;
