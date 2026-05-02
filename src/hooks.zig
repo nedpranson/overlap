@@ -10,7 +10,7 @@ var load_library_w: *@TypeOf(LoadLibraryW) = undefined;
 
 var thread: windows.HANDLE = undefined;
 
-pub fn init() !void {
+pub fn init(io: std.Io, gpa: std.mem.Allocator) !void {
     thread = windows.GetCurrentThread();
 
     // todo: ping unavtive hooks
@@ -18,7 +18,7 @@ pub fn init() !void {
     //     windows.OutputDebugString("seen d3d11.dll");
     // }
 
-    dxgi.init() catch {};
+    dxgi.init(io, gpa) catch {};
 
     try detours.TransactionBegin();
     errdefer detours.TransactionAbort() catch {};

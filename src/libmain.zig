@@ -20,7 +20,7 @@ fn libmain(io: std.Io, gpa: std.mem.Allocator) !void {
     }.invokeFn);
     defer manager.RemoveCurrentSessionChanged(token) catch unreachable;
 
-    try hooks.init();
+    try hooks.init(io, gpa);
     defer hooks.deinit() catch {};
 
     assert(windows.kernel32.WaitForSingleObjectEx(wake_ev, windows.INFINITE, .FALSE) == windows.WAIT_OBJECT_0);

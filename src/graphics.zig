@@ -34,7 +34,7 @@ pub const Backend = struct {
     };
 
     pub inline fn draw(b: *Backend) DrawError!void {
-        return b.vtable.draw();
+        return b.vtable.draw(b);
     }
 };
 

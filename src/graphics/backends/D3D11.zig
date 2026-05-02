@@ -212,5 +212,8 @@ pub fn deinit(b: *Backend) void {
 fn draw(gfx_backend: *gfx.Backend) gfx.Backend.DrawError!void {
     const b: *Backend = @alignCast(@fieldParentPtr("interface", gfx_backend));
 
+    b.context.OMSetRenderTargets((&b.render_target_view)[0..1], null);
+    b.context.OMSetBlendState(b.blend_state, &.{ 0.0, 0.0, 0.0, 0.0 }, 0xFFFFFFFF);
+
     std.debug.print("{}\n", .{b});
 }

@@ -10,19 +10,35 @@ const d3dcommon = windows.d3dcommon;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
+const assert = std.debug.assert;
+
 // We are not hooking d3d11
 // but DXGI as this swapchain will be used by d3d10, d3d11, d3d12
 
-var release: *@TypeOf(Release) = undefined;
-var present: *@TypeOf(Present) = undefined;
-var resize_buffers: *@TypeOf(ResizeBuffers) = undefined;
+// var release: *@TypeOf(Release) = undefined;
+// var present: *@TypeOf(Present) = undefined;
+// var resize_buffers: *@TypeOf(ResizeBuffers) = undefined;
+//
+// var swapchain_map: std.array_hash_map.Auto(*dxgi.IDXGISwapChain, BackendHandle) = .empty;
+// var io: Io = undefined;
+// var rl: Io.RwLock = .init;
+// var gpa2: Allocator = undefined;
 
-var swapchain_map: std.array_hash_map.Auto(*dxgi.IDXGISwapChain, BackendHandle) = .empty;
-var io: Io = undefined;
-var mu: Io.RwLock = .init;
-var gpa2: Allocator = undefined;
+const Hook = struct {
+    io: Io,
+    gpa: Allocator,
 
-pub fn init() !void {
+    rl: Io.RwLock,
+    swapchain_map: std.array_hash_map.Auto(*dxgi.IDXGISwapChain, BackendHandle),
+
+    release: *@TypeOf(Release),
+    present: *@TypeOf(Present),
+    resize_buffers: *@TypeOf(ResizeBuffers),
+};
+
+var hook: ?Hook = null;
+
+pub fn init(io: Io, gpa: Allocator) !void {
     const mod = windows.GetModuleHandle("d3d11.dll") orelse return error.ModuleNotFound;
 
     // todo: get swapchain not only from d3d11
@@ -91,9 +107,9 @@ pub fn init() !void {
     defer device.Release();
     defer swap_chain.Release();
 
-    release = @constCast(swap_chain.vtable.Release);
-    present = @constCast(swap_chain.vtable.Present);
-    resize_buffers = @constCast(swap_chain.vtable.ResizeBuffers);
+    var release = @constCast(swap_chain.vtable.Release);
+    var present = @constCast(swap_chain.vtable.Present);
+    var resize_buffers = @constCast(swap_chain.vtable.ResizeBuffers);
 
     try detours.TransactionBegin();
     errdefer detours.TransactionAbort() catch {};
@@ -105,19 +121,41 @@ pub fn init() !void {
     try detours.Attach(ResizeBuffers, &resize_buffers);
 
     try detours.TransactionCommit();
+
+    assert(hook == null);
+    hook = .{
+        .io = io,
+        .gpa = gpa,
+        .rl = .init,
+        .swapchain_map = .empty,
+        .release = release,
+        .present = present, 
+        .resize_buffers = resize_buffers,
+    };
 }
 
 pub fn deinit() !void {
+    const h = current();
+
     try detours.TransactionBegin();
     errdefer detours.TransactionAbort() catch {};
 
     // todo: update thread
 
-    try detours.Detach(Release, &release);
-    try detours.Detach(Present, &present);
-    try detours.Detach(ResizeBuffers, &resize_buffers);
+    try detours.Detach(Release, &h.release);
+    try detours.Detach(Present, &h.present);
+    try detours.Detach(ResizeBuffers, &h.resize_buffers);
 
     try detours.TransactionCommit();
+
+    for (h.swapchain_map.values()) |b| {
+        b.deinit(h.gpa);
+    }
+    h.swapchain_map.deinit(h.gpa);
+}
+
+inline fn current() *Hook {
+    return &hook.?;
 }
 
 const BackendHandle = struct {
@@ -149,14 +187,17 @@ const BackendHandle = struct {
 };
 
 fn Release(pSwapChain: *dxgi.IDXGISwapChain) callconv(.winapi) windows.ULONG {
-    const refs = release(pSwapChain);
+    const h = current();
+    const refs = h.release(pSwapChain);
 
     if (refs == 0) {
-        mu.lockUncancelable(io);
-        defer mu.unlock(io);
 
-        if (swapchain_map.fetchSwapRemove(pSwapChain)) |kv| {
-            kv.value.deinit(gpa2);
+        // pSwapChain is now invalid and should never be dereferenced
+        h.rl.lockUncancelable(h.io);
+        defer h.rl.unlock(h.io);
+
+        if (h.swapchain_map.fetchSwapRemove(pSwapChain)) |kv| {
+            kv.value.deinit(h.gpa);
         }
     }
 
@@ -168,39 +209,35 @@ fn Present(
     SyncInterval: windows.UINT,
     Flags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
-    const state = (blk: {
-        mu.lockSharedUncancelable(io);
-        defer mu.unlockShared(io);
+    const h = current();
+    const backend = (blk: {
+        h.rl.lockSharedUncancelable(h.io);
+        defer h.rl.unlockShared(h.io);
 
-        break :blk swapchain_map.get(pSwapChain);
+        break :blk h.swapchain_map.get(pSwapChain);
     } orelse blk: {
         @branchHint(.unlikely);
 
-        // todo: free on errors
+        const backend = h.gpa.create(gfx.d3d11.Backend) catch return windows.E_OUTOFMEMORY;
+        backend.* = gfx.d3d11.Backend.init(pSwapChain) catch @panic("todo");
 
-        const backend = gpa2.create(gfx.d3d11.Backend) catch return windows.E_OUTOFMEMORY;
         const handle: BackendHandle = .wrap(backend);
-
-        // defer handle.deinit(gpa2);
-
-        //defer gpa.destroy(backend);
-
-        //backend.* = gfx.d3d11.Backend.init(pSwapChain) catch @panic("todo");
         
-        mu.lockUncancelable(io);
-        defer mu.unlock(io);
+        h.rl.lockUncancelable(h.io);
+        defer h.rl.unlock(h.io);
 
-        swapchain_map.put(gpa2, pSwapChain, handle) catch return windows.E_OUTOFMEMORY;
+        h.swapchain_map.put(h.gpa, pSwapChain, handle) catch {
+            handle.deinit(h.gpa);
+            return windows.E_OUTOFMEMORY;
+        };
+
         break :blk handle;
     }).interface;
 
-    //state.draw() catch |err| {
-    //};
+    backend.draw() catch {};
+    std.debug.print("{}\n", .{backend});
 
-    std.debug.print("{}\n", .{state});
-
-    // init, draw
-    return present(pSwapChain, SyncInterval, Flags);
+    return h.present(pSwapChain, SyncInterval, Flags);
 }
 
 fn ResizeBuffers(
@@ -211,7 +248,8 @@ fn ResizeBuffers(
     NewFormat: dxgi.DXGI_FORMAT,
     SwapChainFlags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
-    const result = resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+    const h = current();
+    const result = h.resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
 
     if (result == windows.S_OK) {
         // resize
