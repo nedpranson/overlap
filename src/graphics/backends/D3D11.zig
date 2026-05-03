@@ -194,6 +194,7 @@ pub fn init(swap_chain: *dxgi.IDXGISwapChain) !Backend {
         .index_buffer = index_buffer,
         .sampler = sampler,
         .interface = .{ 
+            .viewport = .unset,
             .vtable = &.{
                 .draw = draw,
             },
@@ -216,20 +217,12 @@ pub fn deinit(b: *Backend) void {
     b.* = undefined;
 }
 
-fn draw(gfx_backend: *gfx.Backend) gfx.Backend.DrawError!void {
+fn draw(gfx_backend: *gfx.Backend, surface: *const gfx.Surface) void {
     const b: *Backend = @alignCast(@fieldParentPtr("interface", gfx_backend));
 
     {
-        // todo: perhaps just pass window RECR?
-        // like Viewport{w, h}
-        var rect: windows.RECT = undefined;
-        if (windows.user32.GetWindowRect(b.output_window, &rect) == .FALSE) {
-            // means window is not valid
-            return error.DrawFailed;
-        }
-
-        const width: f32 = @floatFromInt(rect.right - rect.left);
-        const height: f32 = @floatFromInt(rect.bottom - rect.top);
+        const width: f32 = @floatFromInt(gfx_backend.viewport.width);
+        const height: f32 = @floatFromInt(gfx_backend.viewport.height);
 
         var mapped_resource: d3d11.D3D11_MAPPED_SUBRESOURCE = undefined;
 
@@ -267,6 +260,7 @@ fn draw(gfx_backend: *gfx.Backend) gfx.Backend.DrawError!void {
         // index_resource.write(gfx.DrawIndex, indecies, b.max_indicies * @sizeOf(gfx.DrawIndex));
     }
 
+    // todo: move to threadlocal storage?
     var snapshot: Snapshot = .load(b.context);
     defer snapshot.store(b.context);
 
@@ -285,7 +279,12 @@ fn draw(gfx_backend: *gfx.Backend) gfx.Backend.DrawError!void {
     b.context.PSSetShader(b.pixel_shader, null);
     b.context.PSSetSamplers(0, (&b.sampler)[0..1]);
 
-    // draw
+    var index_off: windows.UINT = 0;
+    for (surface.draw_commands.items) |cmd| {
+        // todo: set srv
+        b.context.DrawIndexed(cmd.index_len, index_off, cmd.base_vertex);
+        index_off += cmd.index_len;
+    }
 }
 
 // need loadImage and destroy image that will just return *

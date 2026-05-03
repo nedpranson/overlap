@@ -210,6 +210,21 @@ fn Present(
     Flags: windows.UINT,
 ) callconv(.winapi) windows.HRESULT {
     const h = current();
+
+    const viewport = blk: {
+        var desc: dxgi.DXGI_SWAP_CHAIN_DESC = undefined;
+        var rect: windows.RECT = undefined;
+
+        assert(pSwapChain.vtable.GetDesc(pSwapChain, &desc) == windows.S_OK);
+        // todo: remove this intFromEnum non sence
+        if (windows.user32.GetWindowRect(desc.OutputWindow, &rect) == .FALSE) return @intFromEnum(d3d11.D3D11_ERROR.INVALID_CALL);
+        
+        break :blk gfx.Viewport{
+            .width = @intCast(rect.right - rect.left),
+            .height = @intCast(rect.bottom - rect.top),
+        };
+    };
+
     const backend = (blk: {
         h.rl.lockSharedUncancelable(h.io);
         defer h.rl.unlockShared(h.io);
@@ -234,8 +249,21 @@ fn Present(
         break :blk handle;
     }).interface;
 
-    backend.draw() catch {};
-    std.debug.print("{}\n", .{backend});
+    // todo: move to threadlocal storage?
+    var draw_commands: [gfx.max_draw_commands]gfx.DrawCommand = undefined;
+    var draw_verticies: [gfx.max_verticies]gfx.DrawVertex = undefined;
+    var draw_indecies: [gfx.max_indicies]gfx.DrawIndex = undefined;
+    
+    var surface: gfx.Surface = .init(
+        &draw_commands,
+        &draw_verticies,
+        &draw_indecies,
+    );
+
+    surface.rect(.{ 0.0, 0.0 }, .{ 1920.0, 1080.0 }, 0xFFFFFFFF);
+
+    backend.viewport = viewport;
+    backend.vtable.draw(backend, &surface);
 
     return h.present(pSwapChain, SyncInterval, Flags);
 }

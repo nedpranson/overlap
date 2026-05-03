@@ -1,5 +1,6 @@
 // pub const Device = @import("graphics/Device.zig");
 // pub const d3d11 = @import("graphics/d3d11.zig");
+pub const Surface = @import("Surface.zig");
 
 pub const max_draw_commands = 128;
 pub const max_verticies = max_draw_commands * 4;
@@ -12,6 +13,17 @@ pub const d3d11 = struct {
 pub const Viewport = struct {
     width: u32,
     height: u32,
+
+    pub const unset = Viewport{
+        .width = 0,
+        .height = 0,
+    };
+};
+
+pub const DrawCommand = struct {
+    // image: *Image,
+    index_len: DrawIndex,
+    base_vertex: DrawIndex,
 };
 
 pub const DrawIndex = u16;
@@ -28,18 +40,14 @@ pub const DrawVertex = extern struct {
 };
 
 pub const Backend = struct {
+    viewport: Viewport,
     vtable: *const VTable,
 
     pub const VTable = struct {
-        draw: *const fn (b: *Backend) DrawError!void,
+        draw: *const fn (b: *Backend, surface: *const Surface) void,
+        // load image -> resource (managed?)
+        // destroy image
+        // get glyph -> resource
     };
-
-    pub const DrawError = error{
-        DrawFailed,
-    };
-
-    pub inline fn draw(b: *Backend) DrawError!void {
-        return b.vtable.draw(b);
-    }
 };
 

@@ -4,6 +4,8 @@ vtable: *const VTable,
 
 pub const VTable = struct {
     draw: *const fn (b: *Backend) DrawError!void,
+    // load image
+    // destoy image
 };
 
 pub const DrawError = error{
