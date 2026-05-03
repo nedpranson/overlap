@@ -9,6 +9,11 @@ pub const d3d11 = struct {
     pub const Backend = @import("graphics/backends/D3D11.zig");
 };
 
+pub const Viewport = struct {
+    width: u32,
+    height: u32,
+};
+
 pub const DrawIndex = u16;
 
 pub const ConstantBuffer = extern struct {

@@ -568,16 +568,12 @@ pub const ID3D11DeviceContext = extern struct {
         MapType: D3D11_MAP,
         MapFlags: UINT,
         pMappedResource: *D3D11_MAPPED_SUBRESOURCE,
-    ) MapError!void {
+    ) void {
         const FnType = fn (*ID3D11DeviceContext, *ID3D11Resource, UINT, D3D11_MAP, UINT, ?*D3D11_MAPPED_SUBRESOURCE) callconv(.winapi) HRESULT;
         const map: *const FnType = @ptrCast(self.vtable[14]);
 
-        const hr = map(self, pResource, Subresource, MapType, MapFlags, pMappedResource);
-        return switch (hr) {
-            .S_OK => {},
-            .E_OUTOFMEMORY => error.OutOfMemory,
-            else => |err| unexpectedError(err),
-        };
+        // can fail if resource is not mappable
+        assert(map(self, pResource, Subresource, MapType, MapFlags, pMappedResource) == windows.S_OK);
     }
 
     pub inline fn Unmap(

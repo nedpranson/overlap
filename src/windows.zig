@@ -44,7 +44,12 @@ pub const E_INVALIDARG = @as(c_long, @bitCast(@as(c_ulong, 0x80070057)));
 pub const HWND = windows.HWND;
 pub const GUID = windows.GUID;
 pub const BOOL = windows.BOOL;
-pub const RECT = windows.RECT;
+pub const RECT = extern struct {
+    left: LONG,
+    top: LONG,
+    right: LONG,
+    bottom: LONG,
+};
 pub const BYTE = windows.BYTE;
 pub const FLOAT = windows.FLOAT;
 pub const ULONG = windows.ULONG;
@@ -589,7 +594,7 @@ pub fn FindWindow(ClassName: ?[:0]const u8, WindowName: ?[:0]const u8) ?windows.
 
 pub const GetWindowRectError = error{Unexpected};
 
-pub fn GetWindowRect(hWnd: windows.HWND) GetWindowRectError!windows.RECT {
+pub fn GetWindowRect(hWnd: windows.HWND) GetWindowRectError!RECT {
     var rect: windows.RECT = undefined;
     if (user32.GetWindowRect(hWnd, &rect) == .FALSE) {
         return switch (windows.GetLastError()) {

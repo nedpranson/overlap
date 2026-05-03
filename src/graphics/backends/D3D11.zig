@@ -9,8 +9,11 @@ const d3d11 = windows.d3d11;
 const d3dcommon = windows.d3dcommon;
 const d3dcompiler = windows.d3dcompiler;
 
+const assert = std.debug.assert;
+
 device: *d3d11.ID3D11Device,
 context: *d3d11.ID3D11DeviceContext,
+output_window: windows.HWND,
 render_target_view: *d3d11.ID3D11RenderTargetView,
 vertex_shader: *d3d11.ID3D11VertexShader,
 pixel_shader: *d3d11.ID3D11PixelShader,
@@ -26,6 +29,9 @@ interface: gfx.Backend,
 pub fn init(swap_chain: *dxgi.IDXGISwapChain) !Backend {
     const device = try swap_chain.GetDevice(d3d11.ID3D11Device);
     errdefer device.Release();
+
+    var desc: dxgi.DXGI_SWAP_CHAIN_DESC = undefined;
+    assert(swap_chain.vtable.GetDesc(swap_chain, &desc) == windows.S_OK);
 
     const context = device.GetImmediateContext();
     errdefer context.Release();
@@ -177,6 +183,7 @@ pub fn init(swap_chain: *dxgi.IDXGISwapChain) !Backend {
     return .{
         .device = device,
         .context = context,
+        .output_window = desc.OutputWindow,
         .render_target_view = render_target_view,
         .vertex_shader = vertex_shader,
         .pixel_shader = pixel_shader,
@@ -212,8 +219,195 @@ pub fn deinit(b: *Backend) void {
 fn draw(gfx_backend: *gfx.Backend) gfx.Backend.DrawError!void {
     const b: *Backend = @alignCast(@fieldParentPtr("interface", gfx_backend));
 
+    {
+        // todo: perhaps just pass window RECR?
+        // like Viewport{w, h}
+        var rect: windows.RECT = undefined;
+        if (windows.user32.GetWindowRect(b.output_window, &rect) == .FALSE) {
+            // means window is not valid
+            return error.DrawFailed;
+        }
+
+        const width: f32 = @floatFromInt(rect.right - rect.left);
+        const height: f32 = @floatFromInt(rect.bottom - rect.top);
+
+        var mapped_resource: d3d11.D3D11_MAPPED_SUBRESOURCE = undefined;
+
+        b.context.Map(@ptrCast(b.constant_buffer), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &mapped_resource);
+        defer b.context.Unmap(@ptrCast(b.constant_buffer), 0);
+
+        const constant_buffer: *gfx.ConstantBuffer = @ptrCast(@alignCast(mapped_resource.pData));
+
+        // todo: remove L R T B for W H
+
+        const L = 0.0;
+        const R = width;
+        const T = 0.0;
+        const B = height;
+
+        constant_buffer.mvp = .{
+            .{ 2.0 / (R - L), 0.0, 0.0, 0.0 },
+            .{ 0.0, 2.0 / (T - B), 0.0, 0.0 },
+            .{ 0.0, 0.0, 0.5, 0.0 },
+            .{ (R + L) / (L - R), (T + B) / (B - T), 0.5, 1.0 },
+        };
+    }
+
+    {
+        var vertex_resource: d3d11.D3D11_MAPPED_SUBRESOURCE = undefined;
+        var index_resource: d3d11.D3D11_MAPPED_SUBRESOURCE = undefined;
+
+        b.context.Map(@ptrCast(b.vertex_buffer), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &vertex_resource);
+        defer b.context.Unmap(@ptrCast(b.vertex_buffer), 0);
+
+        b.context.Map(@ptrCast(b.index_buffer), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &index_resource);
+        defer b.context.Unmap(@ptrCast(b.index_buffer), 0);
+
+        // vertex_resource.write(gfx.DrawVertex, verticies, b.max_verticies * @sizeOf(gfx.DrawVertex));
+        // index_resource.write(gfx.DrawIndex, indecies, b.max_indicies * @sizeOf(gfx.DrawIndex));
+    }
+
+    var snapshot: Snapshot = .load(b.context);
+    defer snapshot.store(b.context);
+
     b.context.OMSetRenderTargets((&b.render_target_view)[0..1], null);
     b.context.OMSetBlendState(b.blend_state, &.{ 0.0, 0.0, 0.0, 0.0 }, 0xFFFFFFFF);
 
-    std.debug.print("{}\n", .{b});
+    var offset: windows.UINT = 0;
+    var stride: windows.UINT = @sizeOf(gfx.DrawVertex);
+
+    b.context.IASetInputLayout(b.input_layout);
+    b.context.IASetVertexBuffers(0, (&b.vertex_buffer)[0..1], (&stride)[0..1], (&offset)[0..1]);
+    b.context.IASetIndexBuffer(b.index_buffer, if (gfx.DrawIndex == u16) dxgi.DXGI_FORMAT_R16_UINT else @compileError("no corresponding DXGI_FORMAT"), 0);
+    b.context.VSSetConstantBuffers(0, (&b.constant_buffer)[0..1]);
+    b.context.IASetPrimitiveTopology(d3d11.D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    b.context.VSSetShader(b.vertex_shader, null);
+    b.context.PSSetShader(b.pixel_shader, null);
+    b.context.PSSetSamplers(0, (&b.sampler)[0..1]);
+
+    // draw
 }
+
+// need loadImage and destroy image that will just return *
+
+const Snapshot = struct {
+    scissor_rects_len: windows.UINT = 0,
+    viewports_len: windows.UINT = 0,
+    scissor_rects: [d3d11.D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE]d3d11.D3D11_RECT = undefined,
+    viewports: [d3d11.D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE]d3d11.D3D11_VIEWPORT = undefined,
+    rasterizer_state: ?*d3d11.ID3D11RasterizerState = null,
+    blend_state: ?*d3d11.ID3D11BlendState = null,
+    blend_factor: [4]windows.FLOAT = .{ 0.0, 0.0, 0.0, 0.0 },
+    sample_mask: windows.UINT = 0,
+    stencil_ref: windows.UINT = 0,
+    render_target_view: ?*d3d11.ID3D11RenderTargetView = null,
+    depth_stencil_view: ?*d3d11.ID3D11DepthStencilView = null,
+    depth_stencil_state: ?*d3d11.ID3D11DepthStencilState = null,
+    shader_resource_view: ?*d3d11.ID3D11ShaderResourceView = null,
+    sampler_state: ?*d3d11.ID3D11SamplerState = null,
+    pixel_shader: ?*d3d11.ID3D11PixelShader = null,
+    vertex_shader: ?*d3d11.ID3D11VertexShader = null,
+    geometry_shader: ?*d3d11.ID3D11GeometryShader = null,
+    pixel_shader_ins_len: windows.UINT = 0,
+    vertex_shader_ins_len: windows.UINT = 0,
+    geometry_shader_ins_len: windows.UINT = 0,
+    pixel_shader_ins: [256]*d3d11.ID3D11ClassInstance = undefined,
+    vertex_shader_ins: [256]*d3d11.ID3D11ClassInstance = undefined,
+    geometry_shader_ins: [256]*d3d11.ID3D11ClassInstance = undefined,
+    primative_topology: d3d11.D3D11_PRIMITIVE_TOPOLOGY = 0,
+    index_buf: ?*d3d11.ID3D11Buffer = null,
+    vertex_buf: ?*d3d11.ID3D11Buffer = null,
+    constant_buf: ?*d3d11.ID3D11Buffer = null,
+    index_buf_offset: windows.UINT = 0,
+    vertex_buf_stride: windows.UINT = 0,
+    vertex_buf_offset: windows.UINT = 0,
+    index_buf_format: dxgi.DXGI_FORMAT = 0,
+    input_layout: ?*d3d11.ID3D11InputLayout = null,
+
+    pub fn load(context: *d3d11.ID3D11DeviceContext) Snapshot {
+        var snapshot: Snapshot = undefined;
+
+        snapshot.scissor_rects_len = d3d11.D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
+        snapshot.viewports_len = d3d11.D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
+        snapshot.pixel_shader_ins_len = 256;
+        snapshot.vertex_shader_ins_len = 256;
+        snapshot.geometry_shader_ins_len = 256;
+
+        context.RSGetScissorRects(&snapshot.scissor_rects_len, &snapshot.scissor_rects);
+        context.RSGetViewports(&snapshot.viewports_len, &snapshot.viewports);
+        context.RSGetState(&snapshot.rasterizer_state);
+        context.OMGetBlendState(&snapshot.blend_state, &snapshot.blend_factor, &snapshot.sample_mask);
+        context.OMGetRenderTargets((&snapshot.render_target_view)[0..1], &snapshot.depth_stencil_view);
+        context.OMGetDepthStencilState(&snapshot.depth_stencil_state, &snapshot.stencil_ref);
+        context.PSGetShaderResources(0, (&snapshot.shader_resource_view)[0..1]);
+        context.PSGetSamplers(0, (&snapshot.sampler_state)[0..1]);
+        context.PSGetShader(&snapshot.pixel_shader, &snapshot.pixel_shader_ins, &snapshot.pixel_shader_ins_len);
+        context.VSGetShader(&snapshot.vertex_shader, &snapshot.vertex_shader_ins, &snapshot.vertex_shader_ins_len);
+        context.GSGetShader(&snapshot.geometry_shader, &snapshot.geometry_shader_ins, &snapshot.geometry_shader_ins_len);
+        context.VSGetConstantBuffers(0, (&snapshot.constant_buf)[0..1]);
+        context.IAGetPrimitiveTopology(&snapshot.primative_topology);
+        context.IAGetIndexBuffer(&snapshot.index_buf, &snapshot.index_buf_format, &snapshot.index_buf_offset);
+        context.IAGetVertexBuffers(0, (&snapshot.vertex_buf)[0..1], (&snapshot.vertex_buf_stride)[0..1], (&snapshot.index_buf_offset)[0..1]);
+        context.IAGetInputLayout(&snapshot.input_layout);
+
+        return snapshot;
+    }
+
+    pub fn store(snapshot: *Snapshot, context: *d3d11.ID3D11DeviceContext) void {
+        const release = struct {
+            fn inner(mb_ctx: ?*anyopaque) void {
+                if (mb_ctx) |ctx| {
+                    const iunknown: *windows.IUnknown = @ptrCast(@alignCast(ctx));
+                    _ = iunknown.vtable.Release(iunknown);
+                }
+            }
+        }.inner;
+
+        // RSSetScissorRects
+        context.RSSetViewports(snapshot.viewports[0..snapshot.viewports_len]);
+        // RSSetScissorRects
+        context.OMSetBlendState(snapshot.blend_state, &snapshot.blend_factor, snapshot.sample_mask);
+        context.OMSetRenderTargets((&snapshot.render_target_view)[0..1], snapshot.depth_stencil_view);
+        // OMSetDepthStencilState
+        context.PSSetShaderResources(0, (&snapshot.shader_resource_view)[0..1]);
+        context.PSSetSamplers(0, (&snapshot.sampler_state)[0..1]);
+        context.PSSetShader(snapshot.pixel_shader, snapshot.pixel_shader_ins[0..snapshot.pixel_shader_ins_len]);
+        context.VSSetShader(snapshot.vertex_shader, snapshot.vertex_shader_ins[0..snapshot.vertex_shader_ins_len]);
+        // GSSetShader
+        context.IASetPrimitiveTopology(snapshot.primative_topology);
+        context.IASetIndexBuffer(snapshot.index_buf, snapshot.index_buf_format, snapshot.index_buf_offset);
+        context.IASetVertexBuffers(0, (&snapshot.vertex_buf)[0..1], (&snapshot.vertex_buf_stride)[0..1], (&snapshot.vertex_buf_offset)[0..1]);
+        context.VSSetConstantBuffers(0, (&snapshot.constant_buf)[0..1]);
+        context.IASetInputLayout(snapshot.input_layout);
+        
+        release(snapshot.rasterizer_state);
+        release(snapshot.blend_state);
+        release(snapshot.render_target_view);
+        release(snapshot.depth_stencil_view);
+        release(snapshot.depth_stencil_state);
+        release(snapshot.shader_resource_view);
+        release(snapshot.sampler_state);
+
+        release(snapshot.pixel_shader);
+        for (0..snapshot.pixel_shader_ins_len) |i| {
+            snapshot.pixel_shader_ins[i].Release();
+        }
+
+        release(snapshot.vertex_shader);
+        for (0..snapshot.vertex_shader_ins_len) |i| {
+            snapshot.vertex_shader_ins[i].Release();
+        }
+
+        release(snapshot.geometry_shader);
+        for (0..snapshot.geometry_shader_ins_len) |i| {
+            snapshot.geometry_shader_ins[i].Release();
+        }
+
+        release(snapshot.index_buf);
+        release(snapshot.vertex_buf);
+        release(snapshot.constant_buf);
+        release(snapshot.input_layout);
+
+        snapshot.* = undefined;
+    }
+};
