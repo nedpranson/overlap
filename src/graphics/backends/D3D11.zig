@@ -197,6 +197,7 @@ pub fn init(swap_chain: *dxgi.IDXGISwapChain) !Backend {
             .viewport = .unset,
             .vtable = &.{
                 .draw = draw,
+                .image = image,
             },
         },
     };
@@ -286,6 +287,38 @@ fn draw(gfx_backend: *gfx.Backend, surface: *const gfx.Surface) void {
         index_off += cmd.index_len;
     }
 }
+
+fn image(gfx_backend: *gfx.Backend, image_desc: gfx.Backend.ImageDesc) error{OutOfMemory}!gfx.Image {
+    const b: *Backend = @alignCast(@fieldParentPtr("interface", gfx_backend));
+
+    _ = image_desc;
+
+    var tex: *d3d11.ID3D11Texture2D = undefined;
+    var srv: *d3d11.ID3D11ShaderResourceView = undefined;
+
+    try b.device.CreateTexture2D(undefined, undefined, &tex);
+    try b.device.CreateShaderResourceView(@ptrCast(tex), null, &srv);
+
+    const deinitfn = struct {
+        fn inner(i: gfx.Image) void {
+            const t: *d3d11.ID3D11Texture2D = @ptrCast(@alignCast(i.tex));
+            const s: *d3d11.ID3D11ShaderResourceView = @ptrCast(@alignCast(i.srv));
+
+            _ = t.vtable.Release(t);
+            _ = s.vtable.Release(s);
+        }
+    }.inner;
+
+    return .{
+        .tex = tex,
+        .srv = srv,
+
+        .deinit = deinitfn,
+    };
+}
+
+
+
 
 // need loadImage and destroy image that will just return *
 

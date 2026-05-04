@@ -39,15 +39,28 @@ pub const DrawVertex = extern struct {
     flags: u8 = 1,
 };
 
+
+pub const Image = struct {
+    tex: *anyopaque,
+    srv: *anyopaque,
+
+    deinit: *const fn (i: Image) void
+};
+
 pub const Backend = struct {
     viewport: Viewport,
     vtable: *const VTable,
 
     pub const VTable = struct {
         draw: *const fn (b: *Backend, surface: *const Surface) void,
-        // load image -> resource (managed?)
-        // destroy image
-        // get glyph -> resource
+        image: *const fn (b: *Backend, desc: ImageDesc) error{OutOfMemory}!Image,
+    };
+
+    pub const ImageDesc = struct {
+        data: [*]const u8,
+        width: u32,
+        height: u32,
+        dynamic: bool,
     };
 };
 
