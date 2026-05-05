@@ -12,18 +12,6 @@ const Allocator = std.mem.Allocator;
 
 const assert = std.debug.assert;
 
-// We are not hooking d3d11
-// but DXGI as this swapchain will be used by d3d10, d3d11, d3d12
-
-// var release: *@TypeOf(Release) = undefined;
-// var present: *@TypeOf(Present) = undefined;
-// var resize_buffers: *@TypeOf(ResizeBuffers) = undefined;
-//
-// var swapchain_map: std.array_hash_map.Auto(*dxgi.IDXGISwapChain, BackendHandle) = .empty;
-// var io: Io = undefined;
-// var rl: Io.RwLock = .init;
-// var gpa2: Allocator = undefined;
-
 const Hook = struct {
     io: Io,
     gpa: Allocator,
@@ -253,11 +241,19 @@ fn Present(
     var draw_commands: [gfx.max_draw_commands]gfx.DrawCommand = undefined;
     var draw_verticies: [gfx.max_verticies]gfx.DrawVertex = undefined;
     var draw_indecies: [gfx.max_indicies]gfx.DrawIndex = undefined;
+
+    const wp = backend.vtable.image(backend, .{
+        .data = &.{0xFF},
+        .width = 1,
+        .height = 1,
+    }) catch return windows.E_OUTOFMEMORY;
+    defer wp.deinit(wp);
     
     var surface: gfx.Surface = .init(
         &draw_commands,
         &draw_verticies,
         &draw_indecies,
+        wp,
     );
 
     surface.rect(.{ 0.0, 0.0 }, .{ 1920.0, 1080.0 }, 0xFFFFFFFF);

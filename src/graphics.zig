@@ -21,7 +21,7 @@ pub const Viewport = struct {
 };
 
 pub const DrawCommand = struct {
-    // image: *Image,
+    image: *const Image,
     index_len: DrawIndex,
     base_vertex: DrawIndex,
 };
@@ -60,7 +60,7 @@ pub const Backend = struct {
         data: [*]const u8,
         width: u32,
         height: u32,
-        dynamic: bool,
+        dynamic: bool = false,
     };
 };
 

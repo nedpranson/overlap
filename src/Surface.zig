@@ -11,7 +11,7 @@ const y = 1;
 const DrawCommand = struct {
     verticies: []const gfx.DrawVertex,
     indecies: []const gfx.DrawIndex,
-    // image: *Image,
+    image: *const gfx.Image,
 };
 
 // var white_pixel: Image.View = .init(.{
@@ -26,15 +26,19 @@ draw_commands: std.ArrayList(gfx.DrawCommand),
 draw_verticies: std.ArrayList(gfx.DrawVertex),
 draw_indecies: std.ArrayList(gfx.DrawIndex),
 
+white_pixel: gfx.Image,
+
 pub fn init(
     draw_commands: []gfx.DrawCommand,
     draw_verticies: []gfx.DrawVertex,
     draw_indecies: []gfx.DrawIndex,
+    white_pixel: gfx.Image,
 ) Surface {
     return .{
         .draw_commands = .initBuffer(draw_commands),
         .draw_verticies = .initBuffer(draw_verticies),
         .draw_indecies = .initBuffer(draw_indecies),
+        .white_pixel = white_pixel,
     };
 }
 
@@ -54,7 +58,7 @@ pub fn rect(gui: *Surface, top: [2]f32, bot: [2]f32, col: u32) void {
     addDrawCommand(gui, .{
         .verticies = &verticies,
         .indecies = &indecies,
-        // .image = &white_pixel.interface,
+        .image = &gui.white_pixel,
     });
 }
 
@@ -69,7 +73,7 @@ fn addDrawCommand(self: *Surface, draw_cmd: DrawCommand) void {
     self.draw_indecies.appendSliceAssumeCapacity(draw_cmd.indecies);
 
     self.draw_commands.appendAssumeCapacity(.{
-        // .image = draw_cmd.image,
+        .image = draw_cmd.image,
         .index_len = @intCast(draw_cmd.indecies.len),
         .base_vertex = base_vertex,
     });

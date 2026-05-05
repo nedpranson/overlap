@@ -281,8 +281,14 @@ fn draw(gfx_backend: *gfx.Backend, surface: *const gfx.Surface) void {
     b.context.PSSetSamplers(0, (&b.sampler)[0..1]);
 
     var index_off: windows.UINT = 0;
+    var prev_srv: ?*anyopaque = null;
+
     for (surface.draw_commands.items) |cmd| {
-        // todo: set srv
+        if (prev_srv != cmd.image.srv) {
+            b.context.PSSetShaderResources(0, &.{@ptrCast(@alignCast(cmd.image.srv))});
+            prev_srv = cmd.image.srv;
+        }
+
         b.context.DrawIndexed(cmd.index_len, index_off, cmd.base_vertex);
         index_off += cmd.index_len;
     }
@@ -291,13 +297,38 @@ fn draw(gfx_backend: *gfx.Backend, surface: *const gfx.Surface) void {
 fn image(gfx_backend: *gfx.Backend, image_desc: gfx.Backend.ImageDesc) error{OutOfMemory}!gfx.Image {
     const b: *Backend = @alignCast(@fieldParentPtr("interface", gfx_backend));
 
-    _ = image_desc;
-
     var tex: *d3d11.ID3D11Texture2D = undefined;
     var srv: *d3d11.ID3D11ShaderResourceView = undefined;
 
-    try b.device.CreateTexture2D(undefined, undefined, &tex);
+    var desc = std.mem.zeroes(d3d11.D3D11_TEXTURE2D_DESC);
+    desc.Width = image_desc.width;
+    desc.Height = image_desc.height;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = dxgi.DXGI_FORMAT_R8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.BindFlags = d3d11.D3D11_BIND_SHADER_RESOURCE;
+    desc.Usage = if (image_desc.dynamic) d3d11.D3D11_USAGE_DYNAMIC else d3d11.D3D11_USAGE_DEFAULT;
+    desc.CPUAccessFlags = if (image_desc.dynamic) d3d11.D3D11_CPU_ACCESS_WRITE else 0;
+
+    try b.device.CreateTexture2D(&desc, if (image_desc.dynamic) null else &.{
+        .pSysMem = image_desc.data,
+        .SysMemPitch = image_desc.width * 1,
+        .SysMemSlicePitch = 0,
+    }, &tex);
+    errdefer _ = tex.vtable.Release(tex);
+
+    if (image_desc.dynamic) {
+        var data: d3d11.D3D11_MAPPED_SUBRESOURCE = undefined;
+
+        b.context.Map(@ptrCast(tex), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &data);
+        defer b.context.Unmap(@ptrCast(tex), 0);
+
+        data.write(u8, image_desc.data[0 .. image_desc.width * image_desc.height * 1], image_desc.width * 1);
+    }
+
     try b.device.CreateShaderResourceView(@ptrCast(tex), null, &srv);
+    errdefer _ = srv.vtable.Release(srv);
 
     const deinitfn = struct {
         fn inner(i: gfx.Image) void {
@@ -316,11 +347,6 @@ fn image(gfx_backend: *gfx.Backend, image_desc: gfx.Backend.ImageDesc) error{Out
         .deinit = deinitfn,
     };
 }
-
-
-
-
-// need loadImage and destroy image that will just return *
 
 const Snapshot = struct {
     scissor_rects_len: windows.UINT = 0,
