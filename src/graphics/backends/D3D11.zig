@@ -257,8 +257,8 @@ fn draw(gfx_backend: *gfx.Backend, surface: *const gfx.Surface) void {
         b.context.Map(@ptrCast(b.index_buffer), 0, d3d11.D3D11_MAP_WRITE_DISCARD, 0, &index_resource);
         defer b.context.Unmap(@ptrCast(b.index_buffer), 0);
 
-        // vertex_resource.write(gfx.DrawVertex, verticies, b.max_verticies * @sizeOf(gfx.DrawVertex));
-        // index_resource.write(gfx.DrawIndex, indecies, b.max_indicies * @sizeOf(gfx.DrawIndex));
+        vertex_resource.write(gfx.DrawVertex, surface.draw_verticies.items, gfx.max_verticies * @sizeOf(gfx.DrawVertex));
+        index_resource.write(gfx.DrawIndex, surface.draw_indecies.items, gfx.max_indicies * @sizeOf(gfx.DrawIndex));
     }
 
     // todo: move to threadlocal storage?
