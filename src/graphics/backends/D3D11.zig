@@ -316,7 +316,7 @@ fn image(gfx_backend: *gfx.Backend, image_desc: gfx.Backend.ImageDesc) error{Out
         .SysMemPitch = image_desc.width * 1,
         .SysMemSlicePitch = 0,
     }, &tex);
-    errdefer _ = tex.vtable.Release(tex);
+    errdefer tex.Release();
 
     if (image_desc.dynamic) {
         var data: d3d11.D3D11_MAPPED_SUBRESOURCE = undefined;
@@ -335,7 +335,7 @@ fn image(gfx_backend: *gfx.Backend, image_desc: gfx.Backend.ImageDesc) error{Out
             const t: *d3d11.ID3D11Texture2D = @ptrCast(@alignCast(i.tex));
             const s: *d3d11.ID3D11ShaderResourceView = @ptrCast(@alignCast(i.srv));
 
-            _ = t.vtable.Release(t);
+            t.Release();
             _ = s.vtable.Release(s);
         }
     }.inner;

@@ -227,41 +227,39 @@ pub const D3D11_SUBRESOURCE_DATA = extern struct {
     SysMemSlicePitch: UINT,
 };
 
-pub const ID3D11Texture2D = IUnknown;
+pub const ID3D11Texture2D = extern struct {
+    vtable: [*]const *const anyopaque,
 
-// pub const ID3D11Texture2D = extern struct {
-//     vtable: [*]const *const anyopaque,
-//
-//     /// __uuidof(ID3D11Texture2D) = `"6f15aaf2-d208-4e89-9ab4-489535d34f9c"`
-//     pub const UUID = &GUID{
-//         .Data1 = 0x6f15aaf2,
-//         .Data2 = 0xd208,
-//         .Data3 = 0x4e89,
-//         .Data4 = .{
-//             0x9a, 0xb4,
-//             0x48, 0x95,
-//             0x35, 0xd3,
-//             0x4f, 0x9c,
-//         },
-//     };
-//
-//     pub inline fn Release(self: *ID3D11Texture2D) void {
-//         const FnType = fn (*ID3D11Texture2D) callconv(.winapi) ULONG;
-//         const release: *const FnType = @ptrCast(self.vtable[2]);
-//
-//         _ = release(self);
-//     }
-//
-//     pub fn GetDevice(self: *ID3D11Texture2D) *ID3D11Device {
-//         const FnType = fn (*ID3D11Texture2D, **ID3D11Device) callconv(.winapi) void;
-//         const get_device: *const FnType = @ptrCast(self.vtable[3]);
-//
-//         var pDevice: *ID3D11Device = undefined;
-//         get_device(self, &pDevice);
-//
-//         return pDevice;
-//     }
-// };
+    /// __uuidof(ID3D11Texture2D) = `"6f15aaf2-d208-4e89-9ab4-489535d34f9c"`
+    pub const UUID = &GUID{
+        .Data1 = 0x6f15aaf2,
+        .Data2 = 0xd208,
+        .Data3 = 0x4e89,
+        .Data4 = .{
+            0x9a, 0xb4,
+            0x48, 0x95,
+            0x35, 0xd3,
+            0x4f, 0x9c,
+        },
+    };
+
+    pub inline fn Release(self: *ID3D11Texture2D) void {
+        const FnType = fn (*ID3D11Texture2D) callconv(.winapi) ULONG;
+        const release: *const FnType = @ptrCast(self.vtable[2]);
+
+        _ = release(self);
+    }
+
+    pub fn GetDevice(self: *ID3D11Texture2D) *ID3D11Device {
+        const FnType = fn (*ID3D11Texture2D, **ID3D11Device) callconv(.winapi) void;
+        const get_device: *const FnType = @ptrCast(self.vtable[3]);
+
+        var pDevice: *ID3D11Device = undefined;
+        get_device(self, &pDevice);
+
+        return pDevice;
+    }
+};
 
 pub const ID3D11Device = extern struct {
     vtable: [*]const *const anyopaque,
