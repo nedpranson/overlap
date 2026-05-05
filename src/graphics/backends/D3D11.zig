@@ -69,7 +69,7 @@ pub fn init(swap_chain: *dxgi.IDXGISwapChain) !Backend {
     }
     defer pixel_blob.Release();
 
-    try device.CreateVertexShader(pixel_blob.slice(), null, &pixel_shader);
+    try device.CreatePixelShader(pixel_blob.slice(), null, &pixel_shader);
     errdefer pixel_shader.Release();
 
     var blend_state: *d3d11.ID3D11BlendState = undefined;

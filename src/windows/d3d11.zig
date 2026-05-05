@@ -405,12 +405,12 @@ pub const ID3D11Device = extern struct {
         pClassLinkage: ?*ID3D11ClassLinkage,
         ppPixelShader: **ID3D11PixelShader,
     ) CreateShaderError!void {
-        const FnType = fn (*ID3D11Device, LPCVOID, SIZE_T, ?*ID3D11ClassLinkage, **ID3D11PixelShader) callconv(.winapi) HRESULT;
+        const FnType = fn (*ID3D11Device, LPCVOID, SIZE_T, ?*ID3D11ClassLinkage, **ID3D11PixelShader) callconv(.winapi) D3D11_ERROR;
         const create_pixel_shader: *const FnType = @ptrCast(self.vtable[15]);
 
         const hr = create_pixel_shader(self, ShaderBytecode.ptr, ShaderBytecode.len, pClassLinkage, ppPixelShader);
         return switch (hr) {
-            .S_OK => {},
+            .OK => {},
             else => |err| unexpectedError(err),
         };
     }
