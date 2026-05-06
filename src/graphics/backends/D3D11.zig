@@ -190,9 +190,9 @@ pub fn init(swap_chain: *dxgi.IDXGISwapChain) !Backend {
     tex_desc.Usage = d3d11.D3D11_USAGE_DEFAULT;
 
     try device.CreateTexture2D(&tex_desc, &.{
-        .pSysMem = &.{0xFF},
+        .pSysMem = &[1]u8{0xFF},
         .SysMemPitch = 1,
-        .SysMemSlicePitch = 0,
+        .SysMemSlicePitch = 1,
     }, &tex);
     errdefer tex.Release();
 
