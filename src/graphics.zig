@@ -47,13 +47,25 @@ pub const Image = struct {
     deinit: *const fn (i: Image) void
 };
 
+// pub const CBackend = struct {
+//     viewport: CViewport,
+//     vtable: *const CVTable,
+//
+//     pub const CVTable = struct {
+//         draw: *const fn (b: *CBackend, surface: *const CSurface) void,
+//         image: *const fn (b: *CBackend, desc: *const CImageDesc, image: *CImage) BOOL,
+//     };
+
 pub const Backend = struct {
     viewport: Viewport,
+    identity: Image,
+
     vtable: *const VTable,
 
     pub const VTable = struct {
         draw: *const fn (b: *Backend, surface: *const Surface) void,
         image: *const fn (b: *Backend, desc: ImageDesc) error{OutOfMemory}!Image,
+        // reset: *const fn (b: *Backend) error{OutOfMemory}!void
     };
 
     pub const ImageDesc = struct {
@@ -63,4 +75,3 @@ pub const Backend = struct {
         dynamic: bool = false,
     };
 };
-

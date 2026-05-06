@@ -124,6 +124,7 @@ pub fn init(io: Io, gpa: Allocator) !void {
 
 pub fn deinit() !void {
     const h = current();
+    defer hook = null;
 
     try detours.TransactionBegin();
     errdefer detours.TransactionAbort() catch {};
@@ -179,7 +180,6 @@ fn Release(pSwapChain: *dxgi.IDXGISwapChain) callconv(.winapi) windows.ULONG {
     const refs = h.release(pSwapChain);
 
     if (refs == 0) {
-
         // pSwapChain is now invalid and should never be dereferenced
         h.rl.lockUncancelable(h.io);
         defer h.rl.unlock(h.io);
@@ -242,21 +242,14 @@ fn Present(
     var draw_verticies: [gfx.max_verticies]gfx.DrawVertex = undefined;
     var draw_indecies: [gfx.max_indicies]gfx.DrawIndex = undefined;
 
-    const wp = backend.vtable.image(backend, .{
-        .data = &.{0xFF},
-        .width = 1,
-        .height = 1,
-    }) catch return windows.E_OUTOFMEMORY;
-    defer wp.deinit(wp);
-    
-    var surface: gfx.Surface = .init(
-        &draw_commands,
-        &draw_verticies,
-        &draw_indecies,
-        wp,
-    );
+    var surface: gfx.Surface = .{
+        .draw_commands = .initBuffer(&draw_commands),
+        .draw_verticies = .initBuffer(&draw_verticies),
+        .draw_indecies = .initBuffer(&draw_indecies),
+        .identity = &backend.identity,
+    };
 
-    surface.rect(.{ 0.0, 0.0 }, .{ 1920.0, 1080.0 }, 0xFFFFFFFF);
+    surface.rect(.{ 0.0, 0.0 }, .{ 1920.0, 1080.0 }, 0xFFFFFF80);
 
     backend.viewport = viewport;
     backend.vtable.draw(backend, &surface);
@@ -276,7 +269,6 @@ fn ResizeBuffers(
     const result = h.resize_buffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
 
     if (result == windows.S_OK) {
-        // resize
     }
 
     return result;

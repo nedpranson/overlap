@@ -13,7 +13,6 @@ const assert = std.debug.assert;
 
 device: *d3d11.ID3D11Device,
 context: *d3d11.ID3D11DeviceContext,
-output_window: windows.HWND,
 render_target_view: *d3d11.ID3D11RenderTargetView,
 vertex_shader: *d3d11.ID3D11VertexShader,
 pixel_shader: *d3d11.ID3D11PixelShader,
@@ -29,9 +28,6 @@ interface: gfx.Backend,
 pub fn init(swap_chain: *dxgi.IDXGISwapChain) !Backend {
     const device = try swap_chain.GetDevice(d3d11.ID3D11Device);
     errdefer device.Release();
-
-    var desc: dxgi.DXGI_SWAP_CHAIN_DESC = undefined;
-    assert(swap_chain.vtable.GetDesc(swap_chain, &desc) == windows.S_OK);
 
     const context = device.GetImmediateContext();
     errdefer context.Release();
@@ -180,10 +176,32 @@ pub fn init(swap_chain: *dxgi.IDXGISwapChain) !Backend {
     try device.CreateSamplerState(&sampler_desc, &sampler);
     errdefer sampler.Release();
 
+    var tex: *d3d11.ID3D11Texture2D = undefined;
+    var srv: *d3d11.ID3D11ShaderResourceView = undefined;
+
+    var tex_desc = std.mem.zeroes(d3d11.D3D11_TEXTURE2D_DESC);
+    tex_desc.Width = 1;
+    tex_desc.Height = 1;
+    tex_desc.MipLevels = 1;
+    tex_desc.ArraySize = 1;
+    tex_desc.Format = dxgi.DXGI_FORMAT_R8_UNORM;
+    tex_desc.SampleDesc.Count = 1;
+    tex_desc.BindFlags = d3d11.D3D11_BIND_SHADER_RESOURCE;
+    tex_desc.Usage = d3d11.D3D11_USAGE_DEFAULT;
+
+    try device.CreateTexture2D(&tex_desc, &.{
+        .pSysMem = &.{0xFF},
+        .SysMemPitch = 1,
+        .SysMemSlicePitch = 0,
+    }, &tex);
+    errdefer tex.Release();
+
+    try device.CreateShaderResourceView(@ptrCast(tex), null, &srv);
+    errdefer _ = srv.vtable.Release(srv);
+
     return .{
         .device = device,
         .context = context,
-        .output_window = desc.OutputWindow,
         .render_target_view = render_target_view,
         .vertex_shader = vertex_shader,
         .pixel_shader = pixel_shader,
@@ -195,6 +213,11 @@ pub fn init(swap_chain: *dxgi.IDXGISwapChain) !Backend {
         .sampler = sampler,
         .interface = .{ 
             .viewport = .unset,
+            .identity = .{
+                .tex = tex,
+                .srv = srv,
+                .deinit = undefined,
+            },
             .vtable = &.{
                 .draw = draw,
                 .image = image,
@@ -204,6 +227,7 @@ pub fn init(swap_chain: *dxgi.IDXGISwapChain) !Backend {
 }
 
 pub fn deinit(b: *Backend) void {
+    deinitImage(b.interface.identity);
     b.sampler.Release();
     b.index_buffer.Release();
     b.vertex_buffer.Release();
@@ -330,22 +354,20 @@ fn image(gfx_backend: *gfx.Backend, image_desc: gfx.Backend.ImageDesc) error{Out
     try b.device.CreateShaderResourceView(@ptrCast(tex), null, &srv);
     errdefer _ = srv.vtable.Release(srv);
 
-    const deinitfn = struct {
-        fn inner(i: gfx.Image) void {
-            const t: *d3d11.ID3D11Texture2D = @ptrCast(@alignCast(i.tex));
-            const s: *d3d11.ID3D11ShaderResourceView = @ptrCast(@alignCast(i.srv));
-
-            t.Release();
-            _ = s.vtable.Release(s);
-        }
-    }.inner;
-
     return .{
         .tex = tex,
         .srv = srv,
 
-        .deinit = deinitfn,
+        .deinit = deinitImage,
     };
+}
+
+fn deinitImage(i: gfx.Image) void {
+    const t: *d3d11.ID3D11Texture2D = @ptrCast(@alignCast(i.tex));
+    const s: *d3d11.ID3D11ShaderResourceView = @ptrCast(@alignCast(i.srv));
+
+    t.Release();
+    _ = s.vtable.Release(s);
 }
 
 const Snapshot = struct {

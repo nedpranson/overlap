@@ -14,33 +14,12 @@ const DrawCommand = struct {
     image: *const gfx.Image,
 };
 
-// var white_pixel: Image.View = .init(.{
-//     .width = 1,
-//     .height = 1,
-//     .data = &.{0xFF},
-//     .format = .r,
-// });
-
 draw_commands: std.ArrayList(gfx.DrawCommand),
 
 draw_verticies: std.ArrayList(gfx.DrawVertex),
 draw_indecies: std.ArrayList(gfx.DrawIndex),
 
-white_pixel: gfx.Image,
-
-pub fn init(
-    draw_commands: []gfx.DrawCommand,
-    draw_verticies: []gfx.DrawVertex,
-    draw_indecies: []gfx.DrawIndex,
-    white_pixel: gfx.Image,
-) Surface {
-    return .{
-        .draw_commands = .initBuffer(draw_commands),
-        .draw_verticies = .initBuffer(draw_verticies),
-        .draw_indecies = .initBuffer(draw_indecies),
-        .white_pixel = white_pixel,
-    };
-}
+identity: *const gfx.Image,
 
 pub fn rect(gui: *Surface, top: [2]f32, bot: [2]f32, col: u32) void {
     const verticies = [4]gfx.DrawVertex{
@@ -58,7 +37,7 @@ pub fn rect(gui: *Surface, top: [2]f32, bot: [2]f32, col: u32) void {
     addDrawCommand(gui, .{
         .verticies = &verticies,
         .indecies = &indecies,
-        .image = &gui.white_pixel,
+        .image = gui.identity,
     });
 }
 

@@ -42,6 +42,8 @@ pub fn deinit() !void {
     try detours.Detach(LoadLibraryW, &load_library_w);
 
     try detours.TransactionCommit();
+
+    dxgi.deinit() catch {};
 }
 
 // if we will hook smth we should update thread from here
