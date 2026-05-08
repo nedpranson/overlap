@@ -3,28 +3,30 @@ const windows = @import("windows.zig");
 const hooks = @import("hooks.zig");
 const assert = std.debug.assert;
 
-var wake_ev: windows.HANDLE = undefined;
-var done_ev: windows.HANDLE = undefined;
+pub var wake_ev: windows.HANDLE = undefined;
+pub var done_ev: windows.HANDLE = undefined;
 
-fn libmain(io: std.Io, gpa: std.mem.Allocator) !void {
-    try windows.RoInitialize(.MULTITHREADED);
-    defer windows.RoUninitialize();
-
-    const manager = try windows.GlobalSystemMediaTransportControlsSessionManager.Request(io);
-    defer manager.Release();
-
-    const token = try manager.CurrentSessionChanged(gpa, {}, struct {
-        fn invokeFn(_: void, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
-            windows.OutputDebugString("session changed!");
-        }
-    }.invokeFn);
-    defer manager.RemoveCurrentSessionChanged(token) catch unreachable;
-
-    try hooks.init(io, gpa);
-    defer hooks.deinit() catch {};
-
-    assert(windows.kernel32.WaitForSingleObjectEx(wake_ev, windows.INFINITE, .FALSE) == windows.WAIT_OBJECT_0);
-}
+// fn libmain(io: std.Io, gpa: std.mem.Allocator) !void {
+//     // try windows.RoInitialize(.MULTITHREADED);
+//     // defer windows.RoUninitialize();
+//     //
+//     // const manager = try windows.GlobalSystemMediaTransportControlsSessionManager.Request(io);
+//     // defer manager.Release();
+//     //
+//     // const token = try manager.CurrentSessionChanged(gpa, {}, struct {
+//     //     fn invokeFn(_: void, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
+//     //         windows.OutputDebugString("session changed!");
+//     //     }
+//     // }.invokeFn);
+//     // defer manager.RemoveCurrentSessionChanged(token) catch unreachable;
+//
+//     @import("Scene.zig").main(io, gpa);
+//
+//     try hooks.init(io, gpa);
+//     defer hooks.deinit() catch {};
+//
+//     assert(windows.kernel32.WaitForSingleObjectEx(wake_ev, windows.INFINITE, .FALSE) == windows.WAIT_OBJECT_0);
+// }
 
 fn entry(_: windows.LPVOID) callconv(.winapi) windows.DWORD {
     defer assert(windows.kernel32.SetEvent(done_ev) != .FALSE);
@@ -35,7 +37,7 @@ fn entry(_: windows.LPVOID) callconv(.winapi) windows.DWORD {
     var threaded: std.Io.Threaded = .init(debug_allocator.allocator(), .{});
     defer threaded.deinit();
 
-    @call(.always_inline, libmain, .{ threaded.io(), debug_allocator.allocator() }) catch |err| {
+    @call(.always_inline, @import("Scene.zig").main, .{ threaded.io(), debug_allocator.allocator() }) catch |err| {
         std.log.err("{t}", .{err});
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpErrorReturnTrace(trace);

@@ -1383,6 +1383,23 @@ pub const GlobalSystemMediaTransportControlsSession = struct {
         return WindowsGetStringRawBuffer(hstring);
     }
 
+    pub fn TryGetMediaProperties(self: GlobalSystemMediaTransportControlsSession, io: Io) !GlobalSystemMediaTransportControlsSessionMediaProperties {
+        const Operation = AsyncOperation(*IGlobalSystemMediaTransportControlsSessionMediaProperties);
+        var handler: Operation.WaitHandler = .{
+            .io = io,
+            .event = .unset,
+            .ref_count = .init(1),
+        };
+        // Wait until WinRT no longer references this
+        defer while (handler.ref_count.load(.monotonic) != 1)
+            std.atomic.spinLoopHint();
+
+        const operation: Operation = .{ .handle = try self.handle.TryGetMediaPropertiesAsync() };
+        defer operation.Release();
+
+        return .{ .handle = try operation.get2(&handler) };
+    }
+
     pub fn TryGetMediaPropertiesAsync(self: GlobalSystemMediaTransportControlsSession) !AsyncOperation(GlobalSystemMediaTransportControlsSessionMediaProperties) {
         return .{
             .handle = @ptrCast(try self.handle.TryGetMediaPropertiesAsync()),
@@ -1534,6 +1551,23 @@ pub const RandomAccessStreamReference = struct {
     pub inline fn OpenReadAsync(self: RandomAccessStreamReference) !AsyncOperation(*IRandomAccessStreamWithContentType) {
         return .{ .handle = try self.handle.OpenReadAsync() };
     }
+
+    pub fn OpenRead(self: RandomAccessStreamReference, io: Io) !*IRandomAccessStreamWithContentType {
+        const Operation = AsyncOperation(*IRandomAccessStreamWithContentType);
+        var handler: Operation.WaitHandler = .{
+            .io = io,
+            .event = .unset,
+            .ref_count = .init(1),
+        };
+        // Wait until WinRT no longer references this
+        defer while (handler.ref_count.load(.monotonic) != 1)
+            std.atomic.spinLoopHint();
+
+        const operation: Operation = .{ .handle = try self.handle.OpenReadAsync() };
+        defer operation.Release();
+
+        return operation.get2(&handler);
+    }
 };
 
 pub const BitmapDecoder = struct {
@@ -1541,6 +1575,37 @@ pub const BitmapDecoder = struct {
 
     const NAME = IBitmapDecoder.NAME;
     const SIGNATURE = IBitmapDecoder.SIGNATURE;
+
+    pub fn Create(stream: *IRandomAccessStream, io: Io) !BitmapDecoder {
+        const Operation = AsyncOperation(*IBitmapDecoder);
+        var handler: Operation.WaitHandler = .{
+            .io = io,
+            .event = .unset,
+            .ref_count = .init(1),
+        };
+        // Wait until WinRT no longer references this
+        defer while (handler.ref_count.load(.monotonic) != 1)
+            std.atomic.spinLoopHint();
+
+        var header: HSTRING_HEADER = undefined;
+        const class = try WindowsCreateStringReference(unicode.wtf8ToWtf16LeStringLiteral(NAME), &header);
+
+        var static_bitmap_decoder: *IBitmapDecoderStatics = undefined;
+
+        try RoGetActivationFactory(
+            class,
+            IBitmapDecoderStatics.UUID,
+            @ptrCast(&static_bitmap_decoder),
+        );
+        defer static_bitmap_decoder.Release();
+
+        const operation: Operation = .{ .handle = try static_bitmap_decoder.CreateAsync(stream) };
+        defer operation.Release();
+
+        return .{
+            .handle = try operation.get2(&handler),
+        };
+    }
 
     pub fn CreateAsync(stream: *IRandomAccessStream) !AsyncOperation(BitmapDecoder) {
         var header: HSTRING_HEADER = undefined;
@@ -1562,6 +1627,25 @@ pub const BitmapDecoder = struct {
 
     pub inline fn Release(self: BitmapDecoder) void {
         self.handle.Release();
+    }
+
+    pub fn GetFrame(self: BitmapDecoder, io: Io, frameIndex: UINT32) !BitmapFrame {
+        const Operation = AsyncOperation(*IBitmapFrame);
+        var handler: Operation.WaitHandler = .{
+            .io = io,
+            .event = .unset,
+            .ref_count = .init(1),
+        };
+        // Wait until WinRT no longer references this
+        defer while (handler.ref_count.load(.monotonic) != 1)
+            std.atomic.spinLoopHint();
+
+        const operation: Operation = .{ .handle = try self.handle.GetFrameAsync(frameIndex) };
+        defer operation.Release();
+
+        return .{
+            .handle = try operation.get2(&handler),
+        };
     }
 
     pub inline fn GetFrameAsync(self: BitmapDecoder, frameIndex: UINT32) !AsyncOperation(BitmapFrame) {
@@ -1608,6 +1692,38 @@ pub const BitmapFrame = struct {
             colorManagementMode,
         )) };
     }
+
+
+    pub fn GetPixelDataTransformed(
+        self: BitmapFrame,
+        io: Io,
+        pixelFormat: BitmapPixelFormat,
+        alphaMode: BitmapAlphaMode,
+        transform: *IBitmapTransform,
+        exifOrientationMode: ExifOrientationMode,
+        colorManagementMode: ColorManagementMode,
+    ) !PixelDataProvider {
+        const Operation = AsyncOperation(*IPixelDataProvider );
+        var handler: Operation.WaitHandler = .{
+            .io = io,
+            .event = .unset,
+            .ref_count = .init(1),
+        };
+        // Wait until WinRT no longer references this
+        defer while (handler.ref_count.load(.monotonic) != 1)
+            std.atomic.spinLoopHint();
+
+        const operation: Operation = .{ .handle = @ptrCast(try self.handle.GetPixelDataTransformedAsync(
+            pixelFormat,
+            alphaMode,
+            transform,
+            exifOrientationMode,
+            colorManagementMode,
+        )) };
+        defer operation.Release();
+
+        return .{ .handle = try operation.get2(&handler) };
+    }
 };
 
 pub const IActivationFactory = extern struct {
@@ -1627,8 +1743,8 @@ pub const IActivationFactory = extern struct {
 
         const hr = activate_instance(self, instance);
         return switch (hr) {
-            windows.S_OK => {},
-            else => windows.unexpectedError(windows.HRESULT_CODE(hr)),
+            S_OK => {},
+            else => windows.unexpectedError(HRESULT_CODE(hr)),
         };
     }
 };

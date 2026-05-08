@@ -308,9 +308,9 @@ fn draw(gfx_backend: *gfx.Backend, surface: *const gfx.Surface) void {
     var prev_srv: ?*anyopaque = null;
 
     for (surface.draw_commands.items) |cmd| {
-        if (prev_srv != cmd.image.srv) {
-            b.context.PSSetShaderResources(0, &.{@ptrCast(@alignCast(cmd.image.srv))});
-            prev_srv = cmd.image.srv;
+        if (prev_srv != cmd.srv) {
+            b.context.PSSetShaderResources(0, &.{@ptrCast(@alignCast(cmd.srv))});
+            prev_srv = cmd.srv;
         }
 
         b.context.DrawIndexed(cmd.index_len, index_off, cmd.base_vertex);

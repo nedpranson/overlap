@@ -11,7 +11,7 @@ const y = 1;
 const DrawCommand = struct {
     verticies: []const gfx.DrawVertex,
     indecies: []const gfx.DrawIndex,
-    image: gfx.Image,
+    srv: *anyopaque,
 };
 
 draw_commands: std.ArrayList(gfx.DrawCommand),
@@ -37,7 +37,7 @@ pub fn rect(gui: *Surface, top: [2]f32, bot: [2]f32, col: u32) void {
     addDrawCommand(gui, .{
         .verticies = &verticies,
         .indecies = &indecies,
-        .image = gui.identity,
+        .srv = gui.identity.srv,
     });
 }
 
@@ -57,7 +57,7 @@ pub fn image(gui: *Surface, top: [2]f32, bot: [2]f32, img: gfx.Image) void {
     addDrawCommand(gui, .{
         .verticies = &verticies,
         .indecies = &indecies,
-        .image = img,
+        .srv = img.srv,
     });
 }
 
@@ -72,7 +72,7 @@ fn addDrawCommand(self: *Surface, draw_cmd: DrawCommand) void {
     self.draw_indecies.appendSliceAssumeCapacity(draw_cmd.indecies);
 
     self.draw_commands.appendAssumeCapacity(.{
-        .image = draw_cmd.image,
+        .srv = draw_cmd.srv,
         .index_len = @intCast(draw_cmd.indecies.len),
         .base_vertex = base_vertex,
     });

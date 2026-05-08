@@ -3,7 +3,7 @@ const gfx = @import("../graphics.zig");
 const windows = @import("../windows.zig");
 const detours = @import("../detours.zig");
 
-const Scene = @import("../scene.zig");
+const Scene = @import("../Scene.zig");
 
 const d3d11 = windows.d3d11;
 const dxgi = windows.dxgi;
