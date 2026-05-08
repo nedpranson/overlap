@@ -20,5 +20,6 @@ pub fn deinit(s: *Scene) void {
 }
 
 pub fn frame(s: *Scene, gs: *gfx.Surface) void {
-    gs.image(.{ 0.0, 0.0 }, .{ 100.0, 100.0 }, s.image);
+    gs.rect(.{ 0.0, 0.0 }, .{ 130.0, 130.0 }, 0x808080FF);
+    gs.image(.{ 30.0, 30.0 }, .{ 100.0, 100.0 }, s.image);
 }

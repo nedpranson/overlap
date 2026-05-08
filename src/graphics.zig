@@ -21,7 +21,7 @@ pub const Viewport = struct {
 };
 
 pub const DrawCommand = struct {
-    image: *const Image,
+    image: Image,
     index_len: DrawIndex,
     base_vertex: DrawIndex,
 };

@@ -11,7 +11,7 @@ const y = 1;
 const DrawCommand = struct {
     verticies: []const gfx.DrawVertex,
     indecies: []const gfx.DrawIndex,
-    image: *const gfx.Image,
+    image: gfx.Image,
 };
 
 draw_commands: std.ArrayList(gfx.DrawCommand),
@@ -19,7 +19,7 @@ draw_commands: std.ArrayList(gfx.DrawCommand),
 draw_verticies: std.ArrayList(gfx.DrawVertex),
 draw_indecies: std.ArrayList(gfx.DrawIndex),
 
-identity: *const gfx.Image,
+identity: gfx.Image,
 
 pub fn rect(gui: *Surface, top: [2]f32, bot: [2]f32, col: u32) void {
     const verticies = [4]gfx.DrawVertex{
@@ -57,7 +57,7 @@ pub fn image(gui: *Surface, top: [2]f32, bot: [2]f32, img: gfx.Image) void {
     addDrawCommand(gui, .{
         .verticies = &verticies,
         .indecies = &indecies,
-        .image = &img,
+        .image = img,
     });
 }
 

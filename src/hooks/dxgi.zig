@@ -252,7 +252,7 @@ fn Present(
         .draw_commands = .initBuffer(&draw_commands),
         .draw_verticies = .initBuffer(&draw_verticies),
         .draw_indecies = .initBuffer(&draw_indecies),
-        .identity = &handle.backend.identity,
+        .identity = handle.backend.identity,
     };
 
     handle.scene.frame(&surface);
