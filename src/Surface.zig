@@ -41,6 +41,26 @@ pub fn rect(gui: *Surface, top: [2]f32, bot: [2]f32, col: u32) void {
     });
 }
 
+pub fn image(gui: *Surface, top: [2]f32, bot: [2]f32, img: gfx.Image) void {
+    const verticies = [4]gfx.DrawVertex{
+        .{ .pos = .{ top[x], top[y] }, .uv = .{ 0.0, 0.0 }, .col = 0xFFFFFFFF },
+        .{ .pos = .{ bot[x], top[y] }, .uv = .{ 1.0, 0.0 }, .col = 0xFFFFFFFF },
+        .{ .pos = .{ bot[x], bot[y] }, .uv = .{ 1.0, 1.0 }, .col = 0xFFFFFFFF },
+        .{ .pos = .{ top[x], bot[y] }, .uv = .{ 0.0, 1.0 }, .col = 0xFFFFFFFF },
+    };
+
+    const indecies = [6]u16{
+        0, 1, 2,
+        0, 2, 3,
+    };
+
+    addDrawCommand(gui, .{
+        .verticies = &verticies,
+        .indecies = &indecies,
+        .image = &img,
+    });
+}
+
 fn addDrawCommand(self: *Surface, draw_cmd: DrawCommand) void {
     const base_vertex: gfx.DrawIndex = @intCast(self.draw_verticies.items.len);
 

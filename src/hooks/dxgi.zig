@@ -3,6 +3,8 @@ const gfx = @import("../graphics.zig");
 const windows = @import("../windows.zig");
 const detours = @import("../detours.zig");
 
+const Scene = @import("../scene.zig");
+
 const d3d11 = windows.d3d11;
 const dxgi = windows.dxgi;
 const d3dcommon = windows.d3dcommon;
@@ -137,7 +139,7 @@ pub fn deinit() !void {
 
     try detours.TransactionCommit();
 
-    for (h.swapchain_map.values()) |b| {
+    for (h.swapchain_map.values()) |*b| {
         b.deinit(h.gpa);
     }
     h.swapchain_map.deinit(h.gpa);
@@ -148,30 +150,31 @@ inline fn current() *Hook {
 }
 
 const BackendHandle = struct {
-    interface: *gfx.Backend,
-    deinitfn: *const fn (*gfx.Backend, gpa: Allocator) void,
+    backend: *gfx.Backend,
+    scene: Scene,
+    deinitfn: *const DeinitFn,
 
-    pub fn wrap(backend: anytype) BackendHandle {
+    const DeinitFn = fn (*gfx.Backend, gpa: Allocator) void;
+
+    fn makeDeinitFn(backend: anytype) *const DeinitFn {
         const T = switch (@typeInfo(@TypeOf(backend))) {
             .pointer => |p| p.child,
             else => @compileError("wrap expects a pointer"),
         };
 
-        return .{
-            .interface = &backend.interface,
-            .deinitfn = struct {
-                fn deinit(gfx_backend: *gfx.Backend, gpa: Allocator) void {
-                    const b: *T = @alignCast(@fieldParentPtr("interface", gfx_backend));
+        return struct {
+            fn deinit(gfx_backend: *gfx.Backend, gpa: Allocator) void {
+                const b: *T = @alignCast(@fieldParentPtr("interface", gfx_backend));
 
-                    b.deinit();
-                    gpa.destroy(b);
-                }
-            }.deinit,
-        };
+                b.deinit();
+                gpa.destroy(b);
+            }
+        }.deinit;
     }
 
-    inline fn deinit(h: BackendHandle, gpa: Allocator) void {
-        h.deinitfn(h.interface, gpa);
+    fn deinit(h: *BackendHandle, gpa: Allocator) void {
+        h.scene.deinit();
+        h.deinitfn(h.backend, gpa);
     }
 };
 
@@ -184,9 +187,8 @@ fn Release(pSwapChain: *dxgi.IDXGISwapChain) callconv(.winapi) windows.ULONG {
         h.rl.lockUncancelable(h.io);
         defer h.rl.unlock(h.io);
 
-        if (h.swapchain_map.fetchSwapRemove(pSwapChain)) |kv| {
-            kv.value.deinit(h.gpa);
-        }
+        var kv = h.swapchain_map.fetchSwapRemove(pSwapChain) orelse return refs;
+        kv.value.deinit(h.gpa);
     }
 
     return refs;
@@ -213,7 +215,7 @@ fn Present(
         };
     };
 
-    const backend = (blk: {
+    var handle = (blk: {
         h.rl.lockSharedUncancelable(h.io);
         defer h.rl.unlockShared(h.io);
 
@@ -224,7 +226,11 @@ fn Present(
         const backend = h.gpa.create(gfx.d3d11.Backend) catch return windows.E_OUTOFMEMORY;
         backend.* = gfx.d3d11.Backend.init(pSwapChain) catch @panic("todo");
 
-        const handle: BackendHandle = .wrap(backend);
+        var handle: BackendHandle = .{
+            .backend = &backend.interface,
+            .scene = Scene.init(&backend.interface) catch @panic("todo"),
+            .deinitfn = BackendHandle.makeDeinitFn(backend),
+        };
         
         h.rl.lockUncancelable(h.io);
         defer h.rl.unlock(h.io);
@@ -235,7 +241,7 @@ fn Present(
         };
 
         break :blk handle;
-    }).interface;
+    });
 
     // todo: move to threadlocal storage?
     var draw_commands: [gfx.max_draw_commands]gfx.DrawCommand = undefined;
@@ -246,13 +252,13 @@ fn Present(
         .draw_commands = .initBuffer(&draw_commands),
         .draw_verticies = .initBuffer(&draw_verticies),
         .draw_indecies = .initBuffer(&draw_indecies),
-        .identity = &backend.identity,
+        .identity = &handle.backend.identity,
     };
 
-    surface.rect(.{ 0.0, 0.0 }, .{ 1920.0, 1080.0 }, 0xFFFFFF80);
+    handle.scene.frame(&surface);
 
-    backend.viewport = viewport;
-    backend.vtable.draw(backend, &surface);
+    handle.backend.viewport = viewport;
+    handle.backend.vtable.draw(handle.backend, &surface);
 
     return h.present(pSwapChain, SyncInterval, Flags);
 }

@@ -39,22 +39,12 @@ pub const DrawVertex = extern struct {
     flags: u8 = 1,
 };
 
-
 pub const Image = struct {
     tex: *anyopaque,
     srv: *anyopaque,
 
     deinit: *const fn (i: Image) void
 };
-
-// pub const CBackend = struct {
-//     viewport: CViewport,
-//     vtable: *const CVTable,
-//
-//     pub const CVTable = struct {
-//         draw: *const fn (b: *CBackend, surface: *const CSurface) void,
-//         image: *const fn (b: *CBackend, desc: *const CImageDesc, image: *CImage) BOOL,
-//     };
 
 pub const Backend = struct {
     viewport: Viewport,
