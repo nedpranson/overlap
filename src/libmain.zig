@@ -37,7 +37,7 @@ fn entry(_: windows.LPVOID) callconv(.winapi) windows.DWORD {
     var threaded: std.Io.Threaded = .init(debug_allocator.allocator(), .{});
     defer threaded.deinit();
 
-    @call(.always_inline, @import("Scene.zig").main, .{ threaded.io(), debug_allocator.allocator() }) catch |err| {
+    @call(.auto, @import("Scene.zig").main, .{ threaded.io(), debug_allocator.allocator() }) catch |err| {
         std.log.err("{t}", .{err});
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpErrorReturnTrace(trace);

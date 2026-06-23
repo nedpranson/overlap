@@ -58,6 +58,9 @@ pub fn main(io: std.Io, gpa: std.mem.Allocator) !void {
     }
     defer if (cover) |c|
         c.Release();
+    
+    // todo: hook
+    // oh my days this is so ugly!!
 
     // const token = try manager.CurrentSessionChanged(gpa, {}, struct {
     //     fn invokeFn(_: void, _: windows.GlobalSystemMediaTransportControlsSessionManager) !void {
